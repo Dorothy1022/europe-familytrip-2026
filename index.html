@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2026 家庭歐洲行 - 終極穩定版</title>
+    <title>2026 家庭歐洲行</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,18 +18,13 @@
         .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
         .loading-overlay { position: fixed; inset: 0; background: #fff; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         
-        /* 月曆關鍵修正樣式 */
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
-        .calendar-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; position: relative; transition: all 0.2s; }
-        .calendar-cell.selected { background-color: #1e293b; color: white; box-shadow: 0 4px 12px rgba(30, 41, 59, 0.2); }
+        .calendar-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 0.85rem; font-weight: 700; cursor: pointer; position: relative; }
+        .calendar-cell.selected { background-color: #1e293b; color: white; shadow: 0 4px 12px rgba(30, 41, 59, 0.2); }
         .calendar-cell.has-expense::after { content: ''; position: absolute; bottom: 4px; width: 4px; height: 4px; background-color: #ef4444; border-radius: 50%; }
         
         #map { height: 100%; width: 100%; z-index: 1; }
         .glass-header { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-        
-        /* 行程卡片動畫 */
-        .item-card { transition: all 0.2s active; }
-        .item-card:active { transform: scale(0.96); opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -38,65 +33,86 @@
     
     <div v-if="!isLoaded" class="loading-overlay">
         <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900 mb-3"></div>
-        <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Restoring UI & Logic...</p>
+        <p class="text-xs font-bold text-slate-400">正在連接 Firebase...</p>
     </div>
 
-    <header class="glass-header px-5 py-4 shadow-sm z-20 flex justify-between items-center shrink-0">
-        <div class="flex-1 mr-4">
-            <h1 class="text-xl font-black text-slate-900 tracking-tighter italic">2026 家庭歐洲行</h1>
-            <input :value="dayTitles[currentDay.replace('/','_')] || ''" @input="updateDayTitle" class="w-full bg-transparent text-[11px] font-bold text-slate-400 outline-none mt-1" :placeholder="currentDay + ' 的主題是？'">
+    <header class="glass-header px-5 py-4 shadow-sm z-20 flex justify-between items-center shrink-0 border-b border-slate-100">
+        <div>
+            <h1 class="text-xl font-black text-slate-900">2026 家庭歐洲行</h1>
+            <input :value="dayTitles[currentDay.replace('/','_')] || ''" @input="updateDayTitle" class="w-full bg-transparent text-[11px] font-bold text-slate-400 outline-none mt-1" :placeholder="currentDay + ' 的主題是什麼？'">
         </div>
-        <div class="text-right flex flex-col items-end">
-             <span class="px-2 py-0.5 bg-slate-900 text-white rounded text-[9px] font-black uppercase tracking-widest">{{ activeTab }}</span>
-             <button @click="location.reload()" class="mt-1 text-slate-300"><i data-lucide="refresh-cw" class="w-3 h-3"></i></button>
-        </div>
+        <button @click="location.reload()" class="p-2 text-slate-300"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
     </header>
 
     <main class="flex-1 overflow-y-auto pb-24 no-scrollbar bg-slate-50">
         
         <div v-show="activeTab === 'itinerary'">
-            <div class="sticky top-0 z-30 glass-header border-b">
+            <div class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b">
                 <div class="flex gap-2 p-4 overflow-x-auto no-scrollbar">
-                    <button v-for="day in days" :key="day" @click="currentDay = day" :class="['px-4 py-2 rounded-xl text-sm font-bold flex-shrink-0 transition-all transform', currentDay === day ? 'bg-slate-900 text-white shadow-md scale-105' : 'bg-slate-50 text-slate-400']">{{ day }}</button>
+                    <button v-for="day in days" :key="day" @click="currentDay = day" :class="['px-4 py-2 rounded-xl text-sm font-bold flex-shrink-0 transition-all', currentDay === day ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-400']">{{ day }}</button>
                 </div>
             </div>
             <div class="p-5 space-y-4">
-                <div v-if="filteredItinerary.length === 0" class="text-center py-20">
-                    <div class="text-slate-200 mb-2"><i data-lucide="map-pin" class="w-12 h-12 mx-auto opacity-20"></i></div>
-                    <p class="text-slate-300 font-black uppercase text-[10px] tracking-widest">目前沒有行程，請點擊 + 新增</p>
-                </div>
-                <div v-for="item in filteredItinerary" :key="item.id" @click="openEditItem(item)" class="bg-white p-5 rounded-3xl shadow-sm border-l-4 item-card" :class="getGroupBorder(item.group)">
-                    <div class="flex justify-between items-center mb-1 text-[10px] font-bold">
-                        <span class="text-slate-300">{{ item.time }}</span>
-                        <span :class="getGroupText(item.group)">{{ getGroupName(item.group) }}</span>
+                <div v-if="filteredItinerary.length === 0" class="text-center py-20 text-slate-300 font-bold text-sm">今天還沒安排行程</div>
+                <div v-for="item in filteredItinerary" :key="item.id" @click="openEditItem(item)" class="bg-white p-5 rounded-3xl shadow-sm border-l-4" :class="getGroupBorder(item.group)">
+                    <div class="flex justify-between items-center mb-1">
+                        <div class="flex items-center gap-2">
+                            <i :data-lucide="getCategoryIcon(item.category)" class="w-3 h-3 text-slate-400"></i>
+                            <span class="text-[10px] font-bold text-slate-300">{{ item.time }}</span>
+                        </div>
+                        <span class="text-[9px] font-black px-1.5 py-0.5 rounded text-white" :class="getGroupBg(item.group)">{{ getGroupName(item.group) }}</span>
                     </div>
-                    <div class="font-black text-slate-800 text-lg tracking-tight">{{ item.location }}</div>
-                    <div v-if="item.note" class="text-xs text-slate-400 mt-2 flex items-center gap-1 opacity-70"><i data-lucide="info" class="w-3 h-3"></i> {{ item.note }}</div>
+                    <div class="font-bold text-slate-800 text-lg leading-tight">{{ item.location }}</div>
+                    <div class="text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-wider">{{ item.category }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div v-show="activeTab === 'map'" class="h-full relative">
+            <div id="map"></div>
+            <div class="absolute top-4 inset-x-4 z-[1000] space-y-2">
+                <div class="bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-xl flex gap-2 overflow-x-auto no-scrollbar border border-white/50">
+                    <button @click="mapFilterDay = 'all'" :class="['px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap', mapFilterDay === 'all' ? 'bg-slate-900 text-white' : 'bg-white border']">全覽</button>
+                    <button v-for="day in days" :key="day" @click="mapFilterDay = day" :class="['px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap', mapFilterDay === day ? 'bg-blue-600 text-white' : 'bg-white border']">{{ day }}</button>
+                </div>
+                <div class="flex justify-center">
+                    <div class="bg-white/90 backdrop-blur-md p-1 rounded-xl shadow-lg flex gap-1 border border-white/50">
+                        <button v-for="g in ['all', 'A', 'B']" :key="g" @click="mapFilterGroup = g" :class="['px-4 py-1.5 rounded-lg text-[10px] font-black', mapFilterGroup === g ? 'bg-slate-800 text-white' : 'text-slate-400']">{{ getGroupName(g) }}</button>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div v-show="activeTab === 'expenses'" class="p-5 space-y-6">
-            <div @click="showFullList = !showFullList" class="bg-slate-900 rounded-[2.2rem] p-8 text-white shadow-2xl relative overflow-hidden active:scale-95 transition">
+            
+            <div class="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex justify-between items-center">
+                <div class="text-xs font-bold text-slate-500">歐元匯率設定 (EUR ➡ TWD)</div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-slate-300">1 :</span>
+                    <input v-model.number="eurRate" type="number" class="w-16 bg-slate-50 p-2 rounded-lg text-right font-black outline-none border border-slate-100">
+                </div>
+            </div>
+
+            <div class="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden active:scale-95 transition">
                 <div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl"></div>
-                <p class="text-slate-400 text-[10px] font-black uppercase mb-1 tracking-[0.2em]">Total Expenses (TWD)</p>
+                <p class="text-slate-400 text-[10px] font-bold uppercase mb-2 tracking-widest">總公費支出 (TWD)</p>
                 <div class="flex justify-between items-end relative z-10">
-                    <h2 class="text-5xl font-black italic tracking-tighter">${{ filteredTotal.toLocaleString() }}</h2>
-                    <div class="flex gap-1 bg-white/10 p-1.5 rounded-xl">
-                        <button v-for="g in ['all', 'A', 'B']" :key="g" @click.stop="expenseFilter = g" :class="['px-3 py-1 rounded-lg text-[10px] font-black transition', expenseFilter === g ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400']">{{ g }}</button>
+                    <h2 class="text-4xl font-black tracking-tighter">${{ filteredTotalTWD.toLocaleString() }}</h2>
+                    <div class="flex gap-1 bg-white/10 p-1 rounded-lg">
+                        <button v-for="g in ['all', 'A', 'B']" :key="g" @click.stop="expenseFilter = g" :class="['px-3 py-1.5 rounded-md text-[10px] font-bold transition', expenseFilter === g ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400']">{{ getGroupName(g) }}</button>
                     </div>
                 </div>
             </div>
 
             <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
-                <div class="p-4 bg-slate-50/50 border-b border-slate-50 flex justify-between items-center">
-                    <h3 class="font-black text-slate-800 text-[10px] uppercase tracking-widest opacity-40">Settlement Suggestions</h3>
+                <div class="p-4 bg-slate-50/50 border-b border-slate-50">
+                    <h3 class="font-bold text-slate-800 text-[10px] uppercase tracking-widest">結算建議 ({{ getGroupName(expenseFilter) }})</h3>
                 </div>
                 <div class="p-5 space-y-3">
-                    <div v-if="settlement.length === 0" class="text-center py-4 text-[10px] text-slate-300 uppercase font-black">No Debts Recorded</div>
+                    <div v-if="settlement.length === 0" class="text-center py-4 text-[10px] text-slate-300 font-bold">目前無欠帳紀錄</div>
                     <div v-for="s in settlement" :key="s.from+s.to" class="flex justify-between items-center p-4 bg-white border border-slate-100 rounded-2xl shadow-sm text-xs font-bold">
-                        <span class="text-slate-600">{{ s.from }} <span class="mx-1 text-slate-200">→</span> {{ s.to }}</span>
-                        <span class="text-blue-600 font-black text-sm">NT$ {{ Math.round(s.amount).toLocaleString() }}</span>
+                        <span>{{ s.from }} → {{ s.to }}</span>
+                        <span class="text-blue-600 font-black">NT$ {{ Math.round(s.amount).toLocaleString() }}</span>
                     </div>
                 </div>
             </div>
@@ -104,11 +120,11 @@
             <div class="bg-white rounded-[2rem] shadow-sm border border-slate-100 p-6">
                 <div class="flex justify-between items-center mb-6">
                     <button @click="changeMonth(-1)" class="p-2 bg-slate-50 rounded-full"><i data-lucide="chevron-left" class="w-4 h-4 text-slate-400"></i></button>
-                    <span class="font-black text-slate-800 text-lg">{{ calYear }} / {{ String(calMonth + 1).padStart(2,'0') }}</span>
+                    <span class="font-bold text-slate-800">{{ calYear }} / {{ calMonth + 1 }}</span>
                     <button @click="changeMonth(1)" class="p-2 bg-slate-50 rounded-full"><i data-lucide="chevron-right" class="w-4 h-4 text-slate-400"></i></button>
                 </div>
                 <div class="calendar-grid">
-                    <div v-for="w in ['日','一','二','三','四','五','六']" :key="w" class="text-[10px] font-black text-slate-200 uppercase pb-2">{{ w }}</div>
+                    <div v-for="w in ['日','一','二','三','四','五','六']" :key="w" class="text-[10px] font-bold text-slate-300 pb-2">{{ w }}</div>
                     <div v-for="(day, idx) in calendarDays" :key="idx" @click="day && (selDate = day.date)" :class="['calendar-cell', day && selDate === day.date ? 'selected' : '', day && day.hasExpense ? 'has-expense' : '']">
                         {{ day ? day.day : '' }}
                     </div>
@@ -116,100 +132,78 @@
             </div>
 
             <div class="space-y-4 pb-12">
-                <h3 class="font-black text-slate-800 text-xl tracking-tighter px-1">{{ selDate.split('-').slice(1).join('/') }} 明細</h3>
-                <div v-if="dailyFilteredExp.length === 0" class="text-center py-10 text-slate-200 font-black text-[10px] uppercase tracking-widest">No Expenses Today</div>
-                <div v-for="exp in dailyFilteredExp" :key="exp.id" @click="openEditExp(exp)" class="bg-white p-6 rounded-[2rem] border border-slate-100 flex justify-between items-center relative overflow-hidden active:bg-slate-50 transition">
-                    <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="getGroupBg(exp.splitGroup)"></div>
-                    <div class="pl-2">
-                        <div class="font-black text-slate-800 text-base">{{ exp.title }}</div>
-                        <div class="text-[10px] text-slate-400 mt-1 font-bold">付: {{ exp.payer }} / 分攤: {{ (exp.targetMembers || []).join(', ') }}</div>
+                <h3 class="font-bold text-slate-800 text-lg px-1">{{ selDate.split('-').slice(1).join('/') }} 帳目明細</h3>
+                <div v-for="exp in dailyFilteredExp" :key="exp.id" @click="openEditExp(exp)" class="bg-white p-5 rounded-3xl border border-slate-100 flex justify-between items-center active:bg-slate-50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-1.5 h-8 rounded-full" :class="getGroupBg(exp.splitGroup)"></div>
+                        <div>
+                            <div class="font-bold text-slate-800 text-sm">{{ exp.title }}</div>
+                            <div class="text-[10px] text-slate-400 font-bold">付: {{ exp.payer }} | 分: {{ (exp.targetMembers || []).join(',') }}</div>
+                        </div>
                     </div>
-                    <div class="font-black text-slate-900 text-lg tracking-tighter">${{ Math.round(exp.twdAmount).toLocaleString() }}</div>
+                    <div class="font-black text-slate-900">${{ Math.round(exp.twdAmount).toLocaleString() }}</div>
                 </div>
             </div>
         </div>
-
-        <div v-show="activeTab === 'map'" class="h-full relative"><div id="map"></div></div>
     </main>
 
-    <nav class="bg-white/90 backdrop-blur-md border-t p-4 flex justify-around safe-bottom absolute bottom-0 w-full z-40 shadow-xl">
-        <button v-for="t in ['itinerary', 'map', 'expenses']" :key="t" @click="switchTab(t)" :class="[activeTab === t ? 'text-slate-900 scale-110' : 'text-slate-300', 'transition-all duration-300']">
+    <nav class="bg-white/90 backdrop-blur-md border-t p-4 flex justify-around safe-bottom absolute bottom-0 w-full z-40">
+        <button v-for="t in ['itinerary', 'map', 'expenses']" :key="t" @click="switchTab(t)" :class="activeTab === t ? 'text-slate-900 scale-110' : 'text-slate-200', 'transition-all'">
             <i :data-lucide="t==='itinerary'?'calendar':(t==='map'?'map':'wallet')"></i>
         </button>
     </nav>
 
-    <button v-if="activeTab !== 'map'" @click="activeTab==='itinerary'?openAddItin():openAddExp()" class="fixed bottom-24 right-6 w-16 h-16 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center z-30 active:scale-90 transition"><i data-lucide="plus" class="w-8 h-8"></i></button>
+    <button v-if="activeTab !== 'map'" @click="activeTab==='itinerary'?openAddItin():openAddExp()" class="fixed bottom-24 right-6 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center z-50 active:scale-90 transition"><i data-lucide="plus" class="w-6 h-6"></i></button>
 
-    <div v-if="showItinModal" class="fixed inset-0 bg-black/60 z-[2000] flex items-end p-4 backdrop-blur-md">
-        <div class="bg-white w-full rounded-[2.5rem] p-8 max-h-[85vh] overflow-y-auto shadow-2xl">
-            <div class="flex justify-between items-center mb-8">
-                <h3 class="text-2xl font-black text-slate-900 tracking-tighter">{{ isEdit ? '編輯行程' : '新增行程' }}</h3>
-                <button @click="showItinModal = false" class="p-2 bg-slate-100 rounded-full text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+    <div v-if="showItinModal" class="fixed inset-0 bg-black/60 z-[2000] flex items-end p-4 backdrop-blur-sm">
+        <div class="bg-white w-full rounded-[2.5rem] p-8 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold">{{ isEdit ? '修改行程' : '新增行程' }}</h3>
+                <button @click="showItinModal = false" class="p-2 bg-slate-100 rounded-full"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
-            <div class="space-y-6">
+            <div class="space-y-5">
                 <div>
-                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">地點名稱</label>
-                    <input v-model="itinForm.location" placeholder="例如：阿姆斯特丹皇宮" class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-bold">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">分類</label>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button v-for="c in ['景點','住宿','班機','交通']" :key="c" @click="itinForm.category = c" :class="['py-2 rounded-xl text-xs font-bold border transition', itinForm.category === c ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-50']">{{ c }}</button>
+                    </div>
                 </div>
+                <input v-model="itinForm.location" placeholder="地點名稱" class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-bold">
                 <div class="flex gap-4">
-                    <div class="flex-1">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">時間</label>
-                        <input v-model="itinForm.time" type="time" class="w-full bg-slate-50 p-4 rounded-2xl font-black">
-                    </div>
-                    <div class="w-32">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">組別</label>
-                        <select v-model="itinForm.group" class="w-full bg-slate-50 p-4 rounded-2xl font-black text-sm h-[56px] appearance-none"><option value="all">全體</option><option value="A">荷蘭組</option><option value="B">三小國</option></select>
-                    </div>
-                </div>
-                <div>
-                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">備註</label>
-                    <textarea v-model="itinForm.note" rows="3" class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-medium text-sm"></textarea>
+                    <input v-model="itinForm.time" type="time" class="flex-1 bg-slate-50 p-4 rounded-2xl font-bold">
+                    <select v-model="itinForm.group" class="w-32 bg-slate-50 p-4 rounded-2xl font-bold appearance-none text-center"><option value="all">全體</option><option value="A">荷蘭組</option><option value="B">三小國</option></select>
                 </div>
                 <div class="flex gap-3 pt-4">
-                    <button v-if="isEdit" @click="delItin" class="px-7 py-4 bg-red-50 text-red-500 rounded-2xl font-black transition active:scale-95"><i data-lucide="trash-2"></i></button>
-                    <button @click="saveItin" class="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-lg shadow-xl active:scale-[0.98] transition">儲存行程</button>
+                    <button v-if="isEdit" @click="delItin" class="px-6 py-4 bg-red-50 text-red-500 rounded-2xl font-bold"><i data-lucide="trash-2"></i></button>
+                    <button @click="saveItin" class="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold">儲存行程</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div v-if="showExpModal" class="fixed inset-0 bg-black/60 z-[2000] flex items-end p-4 backdrop-blur-md">
-        <div class="bg-white w-full rounded-[2.5rem] p-8 max-h-[85vh] overflow-y-auto shadow-2xl">
+    <div v-if="showExpModal" class="fixed inset-0 bg-black/60 z-[2000] flex items-end p-4 backdrop-blur-sm">
+        <div class="bg-white w-full rounded-[2.5rem] p-8 max-h-[85vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-6">
-                <h3 class="text-2xl font-black text-slate-900 tracking-tighter">支出明細</h3>
-                <button @click="showExpModal = false" class="p-2 bg-slate-100 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+                <h3 class="text-xl font-bold">{{ isEdit ? '修改支出' : '新增支出' }}</h3>
+                <button @click="showExpModal = false" class="p-2 bg-slate-100 rounded-full"><i data-lucide="x" class="w-4 h-4"></i></button>
             </div>
-            <div class="space-y-6">
+            <div class="space-y-5">
                 <input v-model="form.title" placeholder="項目" class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-bold">
-                <div class="flex gap-4">
-                    <input v-model.number="form.originalAmount" type="number" placeholder="金額" class="flex-1 bg-slate-50 p-4 rounded-2xl outline-none font-black text-xl">
-                    <select v-model="form.currency" class="bg-slate-50 p-4 rounded-2xl font-black"><option value="EUR">EUR</option><option value="TWD">TWD</option></select>
+                <div class="flex gap-2 items-center">
+                    <input v-model.number="form.originalAmount" type="number" placeholder="金額" class="flex-1 bg-slate-50 p-4 rounded-2xl outline-none font-bold text-lg">
+                    <span class="text-slate-400 font-bold">EUR</span>
                 </div>
-                
-                <div>
-                    <div class="flex justify-between items-center mb-3">
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">分攤對象 (可複選)</label>
-                        <div class="flex gap-1">
-                            <button @click="quickSelect('all')" class="text-[8px] font-black bg-slate-100 px-2 py-1 rounded">全選</button>
-                            <button @click="quickSelect('A')" class="text-[8px] font-black bg-teal-50 text-teal-600 px-2 py-1 rounded">荷蘭</button>
-                            <button @click="quickSelect('B')" class="text-[8px] font-black bg-orange-50 text-orange-600 px-2 py-1 rounded">三小國</button>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2">
-                        <button v-for="m in members" :key="m" @click="toggleM(m)" :class="['py-3.5 rounded-2xl text-xs font-black transition-all border-2', (form.targetMembers || []).includes(m) ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'text-slate-400 border-slate-50 bg-slate-50']">{{ m }}</button>
-                    </div>
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">分攤對象</div>
+                <div class="grid grid-cols-3 gap-2">
+                    <button v-for="m in members" :key="m" @click="toggleM(m)" :class="['py-3 rounded-xl text-xs font-bold border transition', (form.targetMembers || []).includes(m) ? 'bg-blue-600 text-white border-blue-600' : 'text-slate-400 bg-slate-50 border-slate-50']">{{ m }}</button>
                 </div>
-
-                <div>
-                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block">付款人</label>
-                    <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                        <button v-for="m in members" :key="m" @click="form.payer = m" :class="['px-5 py-2.5 rounded-xl text-xs font-black border-2 flex-shrink-0 transition-all', form.payer === m ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'text-slate-400 border-slate-50 bg-slate-50']">{{ m }}</button>
-                    </div>
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">付款人</div>
+                <div class="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                    <button v-for="m in members" :key="m" @click="form.payer = m" :class="['px-5 py-2 rounded-xl text-xs font-bold border flex-shrink-0', form.payer === m ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-400']">{{ m }}</button>
                 </div>
-
                 <div class="flex gap-3 pt-4">
-                    <button v-if="isEdit" @click="delExp" class="px-7 py-4 bg-red-50 text-red-500 rounded-2xl font-black transition active:scale-95"><i data-lucide="trash-2"></i></button>
-                    <button @click="saveExp" class="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-lg shadow-xl active:scale-[0.98] transition">儲存並同步</button>
+                    <button v-if="isEdit" @click="delExp" class="px-6 py-4 bg-red-50 text-red-500 rounded-2xl font-bold"><i data-lucide="trash-2"></i></button>
+                    <button @click="saveExp" class="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold">儲存帳目</button>
                 </div>
             </div>
         </div>
@@ -217,7 +211,7 @@
 </div>
 
 <script type="module">
-    import { createApp, ref, computed, onMounted, nextTick } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+    import { createApp, ref, computed, onMounted, nextTick, watch } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref as dbRef, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
@@ -239,9 +233,9 @@
             const activeTab = ref('itinerary');
             const isLoaded = ref(false);
             const currentDay = ref('3/19');
-            const mapDay = ref('all');
             const selDate = ref('2026-03-19');
             const calDate = ref(new Date(2026, 2, 1));
+            const eurRate = ref(37); // 歐元匯率預設 37
             const members = ['媽媽', '佩琪', '錦盆', '恩琪', '一休'];
             const groups = { all: members, A: ['媽媽', '佩琪', '錦盆'], B: ['恩琪', '一休'] };
             
@@ -252,35 +246,65 @@
             const itinerary = ref([]);
             const expenses = ref([]);
             const dayTitles = ref({});
+            
             const showExpModal = ref(false);
             const showItinModal = ref(false);
             const isEdit = ref(false);
             const form = ref({ targetMembers: [] });
-            const itinForm = ref({});
+            const itinForm = ref({ category: '景點' });
+            
             const expenseFilter = ref('all');
+            const mapFilterDay = ref('all');
+            const mapFilterGroup = ref('all');
 
-            let map = null, markers = L.layerGroup();
+            let map = null, markersLayer = L.layerGroup();
 
             const saveToCloud = () => {
                 if(!isLoaded.value) return;
-                set(dbRef(db, 'travel2026'), { itinerary: itinerary.value, expenses: expenses.value, dayTitles: dayTitles.value, days });
+                set(dbRef(db, 'travel2026'), { 
+                    itinerary: itinerary.value, 
+                    expenses: expenses.value, 
+                    dayTitles: dayTitles.value,
+                    eurRate: eurRate.value 
+                });
             };
 
-            const switchTab = (t) => {
-                activeTab.value = t;
-                if(t === 'map') {
+            const switchTab = (tab) => {
+                activeTab.value = tab;
+                if(tab === 'map') {
                     nextTick(() => {
                         if(!map) {
                             map = L.map('map', { zoomControl: false }).setView([52.3, 4.9], 10);
                             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
-                            markers.addTo(map);
+                            markersLayer.addTo(map);
                         }
                         map.invalidateSize();
-                        updateMap();
+                        updateMapMarkers();
                     });
                 }
                 nextTick(() => lucide.createIcons());
             };
+
+            const updateMapMarkers = () => {
+                markersLayer.clearLayers();
+                let pts = [];
+                const list = itinerary.value.filter(i => {
+                    const dayMatch = mapFilterDay.value === 'all' || i.day === mapFilterDay.value;
+                    const groupMatch = mapFilterGroup.value === 'all' || i.group === 'all' || i.group === mapFilterGroup.value;
+                    return dayMatch && groupMatch;
+                });
+                
+                list.forEach(i => {
+                    if(i.lat) {
+                        const color = i.group==='A'?'#14b8a6':(i.group==='B'?'#f97316':'#3b82f6');
+                        L.circleMarker([i.lat, i.lon], { color, radius: 8, fillOpacity: 0.8 }).addTo(markersLayer).bindPopup(i.location);
+                        pts.push([i.lat, i.lon]);
+                    }
+                });
+                if(pts.length && map) map.fitBounds(pts, { padding: [80, 80] });
+            };
+
+            watch([mapFilterDay, mapFilterGroup], () => updateMapMarkers());
 
             const toggleM = (m) => {
                 if(!form.value.targetMembers) form.value.targetMembers = [];
@@ -289,13 +313,7 @@
                 else form.value.targetMembers.push(m);
             };
 
-            const quickSelect = (type) => {
-                if(type === 'all') form.value.targetMembers = [...members];
-                else if(type === 'A') form.value.targetMembers = ['媽媽', '佩琪', '錦盆'];
-                else if(type === 'B') form.value.targetMembers = ['恩琪', '一休'];
-            };
-
-            const openAddItin = () => { isEdit.value = false; itinForm.value = { id: Date.now(), location: '', time: '10:00', group: 'all', note: '', day: currentDay.value }; showItinModal.value = true; nextTick(()=>lucide.createIcons()); };
+            const openAddItin = () => { isEdit.value = false; itinForm.value = { id: Date.now(), location: '', time: '10:00', group: 'all', category: '景點', day: currentDay.value }; showItinModal.value = true; nextTick(()=>lucide.createIcons()); };
             const openEditItem = (item) => { isEdit.value = true; itinForm.value = JSON.parse(JSON.stringify(item)); showItinModal.value = true; nextTick(()=>lucide.createIcons()); };
             const saveItin = async () => {
                 if(!itinForm.value.lat) {
@@ -307,11 +325,10 @@
             };
             const delItin = () => { itinerary.value = itinerary.value.filter(i => i.id !== itinForm.value.id); saveToCloud(); showItinModal.value = false; };
 
-            const openAddExp = () => { isEdit.value = false; form.value = { id: Date.now(), title: '', originalAmount: 0, currency: 'EUR', payer: '媽媽', targetMembers: [...members], date: selDate.value }; showExpModal.value = true; nextTick(()=>lucide.createIcons()); };
-            const openEditExp = (exp) => { isEdit.value = true; form.value = JSON.parse(JSON.stringify(exp)); if(!form.value.targetMembers) form.value.targetMembers = [...members]; showExpModal.value = true; nextTick(()=>lucide.createIcons()); };
+            const openAddExp = () => { isEdit.value = false; form.value = { id: Date.now(), title: '', originalAmount: 0, payer: '媽媽', targetMembers: [...members], date: selDate.value }; showExpModal.value = true; };
+            const openEditExp = (exp) => { isEdit.value = true; form.value = JSON.parse(JSON.stringify(exp)); showExpModal.value = true; };
             const saveExp = () => {
-                const rate = form.value.currency === 'TWD' ? 1 : 34.5;
-                const data = { ...form.value, twdAmount: (form.value.originalAmount || 0) * rate, splitGroup: form.value.targetMembers.length === 5 ? 'all' : 'custom' };
+                const data = { ...form.value, twdAmount: (form.value.originalAmount || 0) * eurRate.value };
                 const idx = expenses.value.findIndex(e => e.id === data.id);
                 if(idx > -1) expenses.value[idx] = data; else expenses.value.push(data);
                 saveToCloud(); showExpModal.value = false;
@@ -325,22 +342,16 @@
                         itinerary.value = d.itinerary || [];
                         expenses.value = d.expenses || [];
                         dayTitles.value = d.dayTitles || {};
+                        eurRate.value = d.eurRate || 37;
                     }
                     isLoaded.value = true;
                     nextTick(() => lucide.createIcons());
                 });
             });
 
-            const updateMap = () => {
-                markers.clearLayers();
-                let pts = [];
-                itinerary.value.forEach(i => { if(i.lat) { L.circleMarker([i.lat, i.lon], { color: i.group==='A'?'#14b8a6':'#f97316', radius: 6, fillOpacity: 0.8 }).addTo(markers); pts.push([i.lat, i.lon]); } });
-                if(pts.length && map) map.fitBounds(pts, { padding: [80,80] });
-            };
-
             return {
-                activeTab, isLoaded, currentDay, selDate, itinerary, expenses, members, days, showExpModal, showItinModal, isEdit, form, itinForm, expenseFilter, dayTitles,
-                totalTWD: computed(() => (expenses.value || []).reduce((s, e) => s + (e.twdAmount || 0), 0)),
+                activeTab, isLoaded, currentDay, selDate, itinerary, expenses, members, days, showExpModal, showItinModal, isEdit, form, itinForm, expenseFilter, dayTitles, eurRate, mapFilterDay, mapFilterGroup,
+                filteredTotalTWD: computed(() => (expenses.value || []).filter(e => expenseFilter.value === 'all' || (e.targetMembers || members).some(m => groups[expenseFilter.value].includes(m))).reduce((s, e) => s + (e.twdAmount || 0), 0)),
                 filteredItinerary: computed(() => (itinerary.value || []).filter(i => i.day === currentDay.value).sort((a,b)=>a.time.localeCompare(b.time))),
                 dailyFilteredExp: computed(() => (expenses.value || []).filter(e => e.date === selDate.value && (expenseFilter.value === 'all' || (e.targetMembers || members).some(m => groups[expenseFilter.value].includes(m))))),
                 settlement: computed(() => {
@@ -370,11 +381,11 @@
                     return arr;
                 }),
                 calYear: computed(()=>calDate.value.getFullYear()), calMonth: computed(()=>calDate.value.getMonth()),
-                getGroupName: (g) => ({all:'全體', A:'荷蘭組', B:'三小國'}[g]), getGroupBg: (g) => ({all:'bg-slate-900', A:'bg-teal-500', B:'bg-orange-500'}[g]),
+                getGroupName: (g) => ({all:'全體', A:'荷蘭組', B:'三小國組'}[g]), getGroupBg: (g) => ({all:'bg-slate-900', A:'bg-teal-500', B:'bg-orange-500'}[g]),
                 getGroupText: (g) => ({all:'text-slate-900', A:'text-teal-500', B:'text-orange-500'}[g]), getGroupBorder: (g) => ({all:'border-l-slate-900', A:'border-l-teal-500', B:'border-l-orange-500'}[g]),
-                switchTab, openAddExp, openEditExp, openAddItin, openEditItem, saveItin, delItin, toggleM, quickSelect, saveExp, delExp, changeMonth: (v) => calDate.value = new Date(calDate.value.setMonth(calDate.value.getMonth()+v)),
-                updateDayTitle: (e) => { dayTitles.value[currentDay.value.replace('/','_')] = e.target.value; saveToCloud(); },
-                filteredTotal: computed(() => (expenses.value || []).filter(e => expenseFilter.value === 'all' || (e.targetMembers || members).some(m => groups[expenseFilter.value].includes(m))).reduce((s, e) => s + (e.twdAmount || 0), 0))
+                getCategoryIcon: (c) => ({'景點':'map-pin', '住宿':'home', '班機':'plane', '交通':'bus'}[c] || 'tag'),
+                switchTab, openAddExp, openEditExp, openAddItin, openEditItem, saveItin, delItin, toggleM, saveExp, delExp, changeMonth: (v) => calDate.value = new Date(calDate.value.setMonth(calDate.value.getMonth()+v)),
+                updateDayTitle: (e) => { dayTitles.value[currentDay.value.replace('/','_')] = e.target.value; saveToCloud(); }
             };
         }
     }).mount('#app');
