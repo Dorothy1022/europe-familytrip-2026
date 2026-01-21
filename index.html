@@ -3,234 +3,212 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2026 家庭歐洲行 - 最終修復版</title>
+    <title>2026 家庭歐洲行 - 終極穩定版</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
     <style>
+        /* 強制取消所有斜體，並修正文字渲染 */
+        * { font-style: normal !important; -webkit-tap-highlight-color: transparent; }
+        body { background-color: #f8fafc; font-family: -apple-system, "PingFang TC", sans-serif; overflow: hidden; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        body { -webkit-tap-highlight-color: transparent; background-color: #f8fafc; font-family: -apple-system, sans-serif; overflow: hidden; }
-        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-        .loading-overlay { position: fixed; inset: 0; background: #fff; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         
-        /* 搜尋建議 */
-        .suggestion-box { position: absolute; top: 100%; left: 0; right: 0; background: white; z-index: 5000; border-radius: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.15); max-height: 200px; overflow-y: auto; border: 1px solid #f1f5f9; margin-top: 5px; }
+        /* 搜尋建議 - 固定位置防跳動 */
+        .suggestion-box { position: absolute; top: 100%; left: 0; right: 0; background: white; z-index: 5000; border-radius: 1rem; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-height: 200px; overflow-y: auto; border: 1px solid #f1f5f9; margin-top: 5px; }
         
         #map { height: 100%; width: 100%; z-index: 1; }
-        .glass-header { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #f1f5f9; }
+        .loading-overlay { position: fixed; inset: 0; background: #fff; z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
         
-        /* 行程選單 */
-        .menu-dropdown { position: absolute; top: 55px; right: 0; background: white; border-radius: 1rem; box-shadow: 0 4px 20px rgba(0,0,0,0.15); border: 1px solid #f1f5f9; z-index: 6000; min-width: 150px; overflow: hidden; }
-        .menu-item { padding: 14px 20px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f8fafc; }
-        .menu-item:active { background: #f8fafc; }
-        
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
-        .calendar-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 0.8rem; font-weight: 700; cursor: pointer; position: relative; }
-        .calendar-cell.selected { background-color: #1e293b; color: white; }
-        .calendar-cell.has-expense::after { content: ''; position: absolute; bottom: 4px; width: 3px; height: 3px; background-color: #ef4444; border-radius: 50%; }
+        /* 底部導覽 */
+        .bottom-nav { background: white; border-top: 1px solid #f1f5f9; position: absolute; bottom: 0; width: 100%; display: flex; justify-content: space-around; padding: 12px 0; z-index: 100; padding-bottom: calc(12px + env(safe-area-inset-bottom)); box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #cbd5e1; }
+        .nav-item.active { color: #0f172a; }
 
-        /* 分帳明細列表 */
-        .drawer-list { transition: max-height 0.4s ease; overflow-y: auto; background: #fafafa; border-radius: 1.5rem; }
+        /* 右上角選單 */
+        .action-menu { position: absolute; top: 35px; right: 10px; background: white; border: 1px solid #f1f5f9; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); z-index: 500; min-width: 130px; overflow: hidden; }
+        .sortable-ghost { opacity: 0.2; background: #e2e8f0; }
     </style>
 </head>
 <body>
 
-<div id="app" class="h-screen w-full max-w-md mx-auto bg-slate-50 flex flex-col shadow-2xl relative text-slate-800">
+<div id="app" class="h-screen w-full max-w-md mx-auto bg-slate-50 flex flex-col relative text-slate-800 shadow-2xl">
     
     <div v-if="!isLoaded" class="loading-overlay">
-        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900 mb-3"></div>
-        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">初始化中...</p>
+        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900 mb-4"></div>
+        <p class="text-xs font-bold text-slate-400">正在開啟旅程...</p>
     </div>
 
-    <header class="glass-header px-5 py-4 z-20 flex justify-between items-center shrink-0">
-        <div class="flex-1 mr-4">
-            <h1 class="text-xl font-black text-slate-900 tracking-tighter">2026 家庭歐洲行</h1>
-            <input :value="dayTitles[currentDay.replace('/','_')] || ''" @input="updateDayTitle" class="w-full bg-transparent text-[11px] font-bold text-slate-400 outline-none mt-1" :placeholder="currentDay + ' 的主題...'">
+    <header class="bg-white px-6 py-5 border-b shrink-0 z-20">
+        <div class="flex justify-between items-center">
+            <h1 class="text-2xl font-black text-slate-900 tracking-tighter">2026 歐洲行</h1>
+            <button @click="location.reload()" class="text-slate-300">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </button>
         </div>
-        <button @click="location.reload()" class="p-2 text-slate-300">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
-        </button>
+        <input :value="dayTitles[currentDay.replace('/','_')] || ''" @input="updateDayTitle" class="w-full bg-transparent text-xs font-bold text-slate-400 outline-none mt-1" :placeholder="currentDay + ' 的主題...'">
     </header>
 
-    <main class="flex-1 overflow-y-auto pb-24 no-scrollbar bg-slate-50">
+    <main class="flex-1 overflow-y-auto no-scrollbar pb-32">
+        
         <div v-show="activeTab === 'itinerary'">
-            <div class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b">
-                <div class="flex gap-2 p-4 overflow-x-auto no-scrollbar">
-                    <button v-for="day in days" :key="day" @click="currentDay = day" :class="['px-4 py-2 rounded-xl text-sm font-bold flex-shrink-0 transition-all transform', currentDay === day ? 'bg-slate-900 text-white scale-105' : 'bg-slate-50 text-slate-400']">{{ day }}</button>
-                </div>
+            <div class="sticky top-0 bg-white/80 backdrop-blur-md border-b flex gap-2 p-4 overflow-x-auto no-scrollbar z-30">
+                <button v-for="day in days" :key="day" @click="currentDay = day" :class="currentDay === day ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400'" class="px-5 py-2 rounded-2xl text-sm font-black flex-shrink-0 transition-all">{{ day }}</button>
             </div>
-            <div class="p-5 space-y-4">
-                <div v-for="item in filteredItinerary" :key="item.id" @click="openEditItem(item)" class="bg-white p-5 rounded-3xl shadow-sm border-l-4 active:bg-slate-50 transition" :class="getGroupBorder(item.group)">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-[10px] font-bold text-slate-300">{{ item.time }}</span>
-                        <span class="text-[9px] font-black px-1.5 py-0.5 rounded text-white" :class="getGroupBg(item.group)">{{ getGroupName(item.group) }}</span>
-                    </div>
-                    <div class="font-bold text-slate-800 text-lg leading-tight">{{ item.location }}</div>
-                    <div v-if="item.note" class="text-[10px] text-slate-400 mt-2 font-medium italic line-clamp-1">{{ item.note }}</div>
-                </div>
-            </div>
-        </div>
-
-        <div v-show="activeTab === 'map'" class="h-full relative">
-            <div id="map"></div>
-        </div>
-
-        <div v-show="activeTab === 'expenses'" class="p-5 space-y-6">
-            <div class="space-y-3">
-                <div @click="showFullList = !showFullList" class="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden active:scale-[0.98] transition-transform">
-                    <div class="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl"></div>
-                    <div class="flex justify-between items-end relative z-10">
-                        <div>
-                            <p class="text-slate-400 text-[10px] font-bold uppercase mb-2 tracking-widest">總公費支出 (TWD)</p>
-                            <h2 class="text-4xl font-black tracking-tighter">${{ filteredTotalTWD.toLocaleString() }}</h2>
-                        </div>
-                        <div class="flex flex-col items-end gap-3">
-                            <div class="flex gap-1 bg-white/10 p-1 rounded-lg">
-                                <button v-for="g in ['all', 'A', 'B']" :key="g" @click.stop="expenseFilter = g" :class="['px-3 py-1 rounded-md text-[9px] font-black transition', expenseFilter === g ? 'bg-white text-slate-900' : 'text-slate-400']">{{ g }}</button>
+            
+            <div id="itin-list" class="p-6 space-y-4">
+                <div v-for="item in filteredItinerary" :key="item.id" :data-id="item.id" class="bg-white p-6 rounded-[2.5rem] shadow-sm border-l-[10px] relative" :class="item.group === 'A' ? 'border-blue-500' : 'border-orange-500'">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-[10px] font-black text-slate-300 uppercase tracking-widest">{{ item.time }}</span>
+                        <div class="relative">
+                            <button @click.stop="activeMenuId = (activeMenuId === item.id ? null : item.id)" class="text-slate-200 font-black px-2 text-xl">•••</button>
+                            <div v-if="activeMenuId === item.id" class="action-menu">
+                                <button @click="openCopy(item)" class="w-full p-4 text-xs font-black border-b text-left hover:bg-slate-50 transition">複製行程</button>
+                                <button @click="delItin(item.id)" class="w-full p-4 text-xs font-black text-red-500 text-left hover:bg-slate-50 transition">刪除行程</button>
                             </div>
-                            <svg :class="{'rotate-180': showFullList}" class="transition-transform text-slate-500" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </div>
                     </div>
+                    <div @click="openEditItem(item)" class="font-black text-xl text-slate-800 leading-tight">{{ item.location }}</div>
+                    <div v-if="item.note" class="text-[11px] text-slate-400 mt-2 font-medium leading-relaxed">{{ item.note }}</div>
                 </div>
-                <div v-if="showFullList" class="drawer-list max-h-[350px] overflow-y-auto border border-slate-100 p-2 space-y-2">
-                    <div v-for="exp in sortedExpenses" :key="exp.id" @click="openEditExp(exp)" class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm active:bg-slate-50">
-                        <div>
-                            <div class="font-bold text-xs">{{ exp.title }}</div>
-                            <div class="text-[9px] text-slate-400 font-bold">{{ exp.date }} · {{ exp.payer }}付</div>
-                        </div>
-                        <div class="font-black text-slate-900 text-sm">${{ Math.round(exp.twdAmount).toLocaleString() }}</div>
+            </div>
+        </div>
+
+        <div v-show="activeTab === 'map'" class="h-full relative"><div id="map"></div></div>
+
+        <div v-show="activeTab === 'expenses'" class="p-6 space-y-6">
+            <div class="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden">
+                <div class="absolute -top-10 -right-10 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
+                <p class="text-slate-500 text-[10px] font-black uppercase mb-1 tracking-[0.2em]">總公費支出 (TWD)</p>
+                <h2 class="text-5xl font-black tracking-tighter">${{ Math.round(totalTWD).toLocaleString() }}</h2>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div v-for="m in members" :key="m" class="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm text-center">
+                    <div class="text-[10px] font-black text-slate-300 mb-2 tracking-widest uppercase">{{ m }}</div>
+                    <div class="text-2xl font-black tracking-tighter" :class="getBalance(m) >= 0 ? 'text-blue-600' : 'text-orange-500'">
+                        {{ getBalance(m) >= 0 ? '+' : '' }}{{ Math.round(getBalance(m)).toLocaleString() }}
                     </div>
                 </div>
             </div>
 
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
-                <div class="flex justify-between items-center mb-6">
-                    <button @click="changeMonth(-1)" class="p-2 text-slate-300"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                    <span class="font-black text-slate-800 text-lg">{{ calYear }} / {{ calMonth + 1 }}</span>
-                    <button @click="changeMonth(1)" class="p-2 text-slate-300"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+            <div class="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+                <div class="flex justify-between items-center mb-8 px-2 font-black">
+                    <button @click="changeMonth(-1)" class="w-8 h-8 flex items-center justify-center bg-slate-50 rounded-full text-slate-400">←</button>
+                    <span class="text-xl tracking-tighter">{{ calYear }} / {{ calMonth + 1 }}</span>
+                    <button @click="changeMonth(1)" class="w-8 h-8 flex items-center justify-center bg-slate-50 rounded-full text-slate-400">→</button>
                 </div>
-                <div class="calendar-grid">
-                    <div v-for="w in ['日','一','二','三','四','五','六']" :key="w" class="text-[10px] font-bold text-slate-300 pb-2">{{ w }}</div>
-                    <div v-for="(day, idx) in calendarDays" :key="idx" @click="day && (selDate = day.date)" :class="['calendar-cell', day && selDate === day.date ? 'selected' : '', day && day.hasExpense ? 'has-expense' : '']">
+                <div class="grid grid-cols-7 gap-1 text-center">
+                    <div v-for="w in ['日','一','二','三','四','五','六']" :key="w" class="text-[10px] text-slate-300 font-black pb-4">{{ w }}</div>
+                    <div v-for="(day, idx) in calendarDays" :key="idx" @click="day && (selDate = day.date)" :class="day && selDate === day.date ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400'" class="aspect-square flex items-center justify-center text-sm font-black rounded-2xl transition-all">
                         {{ day ? day.day : '' }}
-                    </div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3 pb-12">
-                <div v-for="m in members" :key="m" class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-6 h-6 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-[9px]">{{ m[0] }}</div>
-                        <span class="font-bold text-xs">{{ m }}</span>
-                    </div>
-                    <div class="text-xl font-black tracking-tighter" :class="getMemberBalance(m) >= 0 ? 'text-blue-600' : 'text-orange-500'">
-                        {{ getMemberBalance(m) >= 0 ? '+' : '' }}{{ Math.round(getMemberBalance(m)).toLocaleString() }}
                     </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <nav class="bg-white border-t p-4 flex justify-around safe-bottom absolute bottom-0 w-full z-40">
-        <button v-for="t in ['itinerary', 'map', 'expenses']" :key="t" @click="switchTab(t)" :class="activeTab === t ? 'text-slate-900 scale-110' : 'text-slate-200', 'transition-all'">
-            <svg v-if="t==='itinerary'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            <svg v-if="t==='map'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon></svg>
-            <svg v-if="t==='expenses'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"></path><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"></path><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"></path></svg>
+    <button v-if="activeTab !== 'map'" @click="activeTab === 'expenses' ? openAddExp() : openAddItin()" class="fixed bottom-28 right-8 w-16 h-16 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center font-bold text-3xl z-50 active:scale-90 transition-transform">+</button>
+
+    <nav class="bottom-nav">
+        <button v-for="t in [ {id:'itinerary', label:'行程', icon:'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'}, {id:'map', label:'地圖', icon:'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7'}, {id:'expenses', label:'分帳', icon:'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z'} ]" :key="t.id" @click="switchTab(t.id)" :class="{active: activeTab === t.id}" class="nav-item">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path :d="t.icon"></path></svg>
+            <span class="text-[9px] font-black uppercase tracking-widest">{{ t.label }}</span>
         </button>
     </nav>
 
-    <button v-if="activeTab !== 'map'" @click="activeTab==='itinerary'?openAddItin():openAddExp()" class="fixed bottom-24 right-6 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center z-50 active:scale-90 transition"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
-
     <div v-if="showItinModal" class="fixed inset-0 bg-black/60 z-[2000] flex items-end p-4 backdrop-blur-sm">
-        <div class="bg-white w-full rounded-[2.5rem] p-8 max-h-[90vh] flex flex-col relative overflow-visible">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold">{{ isEdit ? '行程編輯' : '新增行程' }}</h3>
-                <div class="relative">
-                    <button v-if="isEdit" @click="showMenu = !showMenu" class="p-2 bg-slate-100 rounded-full text-slate-900">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
-                    </button>
-                    <div v-if="showMenu" class="menu-dropdown">
-                        <div @click="openCopySelector" class="menu-item text-slate-700">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                            複製行程
-                        </div>
-                        <div @click="delItin" class="menu-item text-rose-500">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                            刪除行程
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex-1 overflow-y-auto no-scrollbar space-y-6 pb-6">
-                <div class="grid grid-cols-3 gap-2">
-                    <button v-for="c in ['景點','住宿','班機']" :key="c" @click="itinForm.category = c" :class="['py-2 rounded-xl text-xs font-bold border transition', itinForm.category === c ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-50']">{{ c }}</button>
+        <div class="bg-white w-full rounded-[3rem] p-10 max-h-[90vh] flex flex-col relative shadow-2xl">
+            <h3 class="text-2xl font-black mb-8">{{ isEdit ? '修改行程' : '新增安排' }}</h3>
+            <div class="flex-1 overflow-y-auto no-scrollbar space-y-8 pb-10">
+                <div class="flex gap-2">
+                    <button v-for="c in ['景點','住宿','班機']" :key="c" @click="itinForm.category = c" :class="itinForm.category === c ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400'" class="flex-1 py-4 rounded-2xl text-xs font-black transition">{{ c }}</button>
                 </div>
                 <div class="relative">
-                    <input v-model="itinForm.location" @input="fetchSuggestions" placeholder="地點名稱..." class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-bold">
+                    <label class="text-[10px] font-black text-slate-300 uppercase block mb-2 tracking-[0.2em]">景點名稱</label>
+                    <input v-model="itinForm.location" @input="fetchSuggestions" placeholder="搜尋地點 (如: Louvre)" class="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-black text-xl border-none">
                     <div v-if="suggestions.length" class="suggestion-box">
-                        <div v-for="s in suggestions" :key="s.place_id" @click="selectSuggestion(s)" class="p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer text-xs font-bold">{{ s.display_name.split(',')[0] }}</div>
+                        <div v-for="s in suggestions" :key="s.place_id" @click="selectSuggestion(s)" class="p-5 border-b border-slate-50 hover:bg-slate-50 cursor-pointer font-black text-sm text-slate-700">{{ s.display_name.split(',')[0] }}</div>
                     </div>
                 </div>
                 <div class="flex gap-4">
-                    <input v-model="itinForm.time" type="time" class="flex-1 bg-slate-50 p-4 rounded-2xl font-bold outline-none">
-                    <select v-model="itinForm.group" class="w-32 bg-slate-50 p-4 rounded-2xl font-bold"><option value="all">全體</option><option value="A">荷蘭組</option><option value="B">三小國組</option></select>
+                    <div class="flex-1">
+                        <label class="text-[10px] font-black text-slate-300 uppercase block mb-2 tracking-[0.2em]">時間</label>
+                        <input v-model="itinForm.time" type="time" class="w-full bg-slate-50 p-5 rounded-[1.5rem] font-black outline-none border-none">
+                    </div>
+                    <div class="w-32">
+                        <label class="text-[10px] font-black text-slate-300 uppercase block mb-2 tracking-[0.2em]">組別</label>
+                        <select v-model="itinForm.group" class="w-full bg-slate-50 p-5 rounded-[1.5rem] font-black outline-none appearance-none text-center border-none"><option value="all">全體</option><option value="A">荷蘭</option><option value="B">三小國</option></select>
+                    </div>
                 </div>
-                <textarea v-model="itinForm.note" rows="3" placeholder="備註內容..." class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-medium text-sm resize-none"></textarea>
+                <div>
+                    <label class="text-[10px] font-black text-slate-300 uppercase block mb-2 tracking-[0.2em]">行程備註</label>
+                    <textarea v-model="itinForm.note" rows="3" placeholder="門票預約、必吃美食..." class="w-full bg-slate-50 p-5 rounded-[1.5rem] outline-none font-bold text-sm resize-none border-none leading-relaxed"></textarea>
+                </div>
             </div>
-
-            <div class="flex gap-3 pt-6 border-t">
-                <button @click="showItinModal = false; showMenu = false" class="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl font-bold">取消</button>
-                <button @click="saveItin" class="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-lg">儲存</button>
+            <div class="flex gap-4 pt-8 border-t">
+                <button @click="showItinModal = false" class="flex-1 py-5 bg-slate-50 text-slate-400 rounded-3xl font-black transition">取消</button>
+                <button @click="saveItin" class="flex-1 py-5 bg-slate-900 text-white rounded-3xl font-black shadow-xl transition">確認儲存</button>
             </div>
         </div>
     </div>
 
     <div v-if="showExpModal" class="fixed inset-0 bg-black/60 z-[2000] flex items-end p-4 backdrop-blur-sm">
-        <div class="bg-white w-full rounded-[2.5rem] p-8 max-h-[85vh] flex flex-col shadow-2xl">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold">支出細節</h3>
-                <button @click="showExpModal = false" class="p-2 bg-slate-100 rounded-full">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
-            </div>
-            <div class="flex-1 overflow-y-auto space-y-6 pb-6">
-                <input v-model="form.title" placeholder="項目" class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-bold">
+        <div class="bg-white w-full rounded-[3.5rem] p-10 max-h-[90vh] flex flex-col shadow-2xl">
+            <h3 class="text-2xl font-black mb-8">新增支出帳目</h3>
+            <div class="flex-1 overflow-y-auto no-scrollbar space-y-8 pb-10">
+                <input v-model="expForm.title" placeholder="支出項目 (如: 晚餐)" class="w-full bg-slate-50 p-6 rounded-[2rem] outline-none font-black text-xl border-none">
+                
                 <div class="flex gap-4">
                     <div class="flex-1">
-                        <label class="text-[10px] font-bold text-slate-400 block mb-2">金額 (EUR)</label>
-                        <input v-model.number="form.originalAmount" type="number" class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-black text-lg">
+                        <label class="text-[10px] font-black text-slate-300 block mb-2 uppercase tracking-[0.2em]">金額</label>
+                        <input v-model.number="expForm.amount" type="number" class="w-full bg-slate-50 p-6 rounded-[2rem] font-black text-3xl outline-none border-none">
                     </div>
-                    <div class="w-32">
-                        <label class="text-[10px] font-bold text-slate-400 block mb-2">匯率 (TWD)</label>
-                        <input v-model.number="form.rate" type="number" step="0.1" class="w-full bg-slate-50 p-4 rounded-2xl outline-none font-bold text-center">
+                    <div class="w-28">
+                        <label class="text-[10px] font-black text-slate-300 block mb-2 uppercase tracking-[0.2em]">幣別</label>
+                        <select v-model="expForm.currency" class="w-full bg-slate-50 p-6 rounded-[2rem] font-black outline-none border-none"><option value="EUR">EUR</option><option value="TWD">TWD</option></select>
                     </div>
                 </div>
-                <div class="grid grid-cols-3 gap-2">
-                    <button v-for="m in members" :key="m" @click="toggleM(m)" :class="['py-3 rounded-xl text-xs font-bold border transition', (form.targetMembers || []).includes(m) ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-400 bg-slate-50 border-slate-50']">{{ m }}</button>
+
+                <div v-if="expForm.currency === 'EUR'" class="bg-blue-50/50 p-5 rounded-[1.5rem] border border-blue-100 flex justify-between items-center">
+                    <span class="text-[11px] font-black text-blue-400 uppercase tracking-widest">歐元匯率調整 (1 EUR = ? TWD)</span>
+                    <input v-model.number="expForm.rate" type="number" step="0.1" class="w-20 bg-white border border-blue-200 rounded-xl p-2 text-center font-black text-blue-600 outline-none">
                 </div>
-                <div class="flex gap-2 overflow-x-auto no-scrollbar">
-                    <button v-for="m in members" :key="m" @click="form.payer = m" :class="['px-5 py-2 rounded-xl text-xs font-bold border flex-shrink-0', form.payer === m ? 'bg-slate-800 text-white' : 'bg-slate-50']">{{ m }}</button>
+
+                <div>
+                    <label class="text-[10px] font-black text-slate-300 uppercase block mb-4 tracking-[0.2em]">付款人 (單選)</label>
+                    <div class="flex gap-2 overflow-x-auto no-scrollbar">
+                        <button v-for="m in members" :key="m" @click="expForm.payer = m" :class="expForm.payer === m ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-100 text-slate-400'" class="px-6 py-3 rounded-2xl text-xs font-black transition-all flex-shrink-0">{{ m }}</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-black text-slate-300 uppercase block mb-4 tracking-[0.2em]">分攤成員 (複選)</label>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button v-for="m in members" :key="m" @click="toggleTarget(m)" :class="expForm.targets.includes(m) ? 'bg-slate-900 text-white shadow-xl scale-105' : 'bg-slate-100 text-slate-400 border border-slate-50'" class="py-5 rounded-3xl text-xs font-black transition-all">{{ m }}</button>
+                        <button @click="quickSelect('A')" class="py-5 bg-blue-50 text-blue-600 rounded-3xl text-[10px] font-black border border-blue-100">荷蘭組</button>
+                        <button @click="quickSelect('B')" class="py-5 bg-orange-50 text-orange-600 rounded-3xl text-[10px] font-black border border-orange-100">三小國組</button>
+                    </div>
                 </div>
             </div>
-            <div class="flex gap-3 pt-6 border-t">
-                <button @click="showExpModal = false" class="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl font-bold">取消</button>
-                <button @click="saveExp" class="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-bold">儲存</button>
+            <div class="flex gap-4 pt-8 border-t">
+                <button @click="showExpModal = false" class="flex-1 py-5 bg-slate-50 text-slate-400 rounded-3xl font-black transition">取消</button>
+                <button @click="saveExp" class="flex-1 py-5 bg-slate-900 text-white rounded-3xl font-black shadow-2xl transition">確認錄入</button>
             </div>
         </div>
     </div>
 
-    <div v-if="showCopySelector" class="fixed inset-0 bg-black/80 z-[3000] flex items-center justify-center p-6 backdrop-blur-md">
-        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 flex flex-col shadow-2xl">
-            <h3 class="text-center font-black mb-6">複製到哪一天？</h3>
-            <div class="max-h-[50vh] overflow-y-auto no-scrollbar space-y-2">
-                <button v-for="day in days" :key="day" @click="copyToDay(day)" class="w-full py-4 rounded-2xl font-bold text-sm bg-slate-50 active:bg-slate-900 active:text-white transition">{{ day }}</button>
+    <div v-if="showCopyModal" class="fixed inset-0 bg-black/80 z-[3000] flex items-center justify-center p-8 backdrop-blur-md">
+        <div class="bg-white w-full max-w-sm rounded-[3.5rem] p-10 flex flex-col shadow-2xl">
+            <h3 class="text-center font-black text-xl mb-8 text-slate-800">要複製到哪一天？</h3>
+            <div class="max-h-[50vh] overflow-y-auto no-scrollbar space-y-3">
+                <button v-for="day in days" :key="day" @click="confirmCopy(day)" class="w-full py-5 rounded-[1.5rem] font-black text-sm bg-slate-50 active:bg-slate-900 active:text-white transition-all">{{ day }}</button>
             </div>
-            <button @click="showCopySelector = false" class="mt-6 w-full py-4 text-slate-400 font-bold">取消</button>
+            <button @click="showCopyModal = false" class="mt-8 w-full py-4 text-slate-400 font-black text-[11px] uppercase tracking-[0.2em]">取消操作</button>
         </div>
     </div>
 </div>
@@ -240,27 +218,20 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref as dbRef, onValue, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const firebaseConfig = {
+    const fb = initializeApp({
         apiKey: "AIzaSyC_trr15i7caUUFXdQeT54rjJj2CbPljlE",
-        authDomain: "europetrip2026-d36f1.firebaseapp.com",
         databaseURL: "https://europetrip2026-d36f1-default-rtdb.firebaseio.com",
-        projectId: "europetrip2026-d36f1",
-        storageBucket: "europetrip2026-d36f1.firebasestorage.app",
-        messagingSenderId: "368850353659",
-        appId: "1:368850353659:web:8cc22ae3fcf13d11051f5e"
-    };
-
-    const fb = initializeApp(firebaseConfig);
+        projectId: "europetrip2026-d36f1"
+    });
     const db = getDatabase(fb);
 
     createApp({
         setup() {
-            const activeTab = ref('itinerary');
             const isLoaded = ref(false);
+            const activeTab = ref('itinerary');
             const currentDay = ref('3/19');
             const selDate = ref('2026-03-19');
             const calDate = ref(new Date(2026, 2, 1));
-            const eurRate = ref(37);
             const members = ['媽媽', '佩琪', '錦盆', '恩琪', '一休'];
             const groups = { all: members, A: ['媽媽', '佩琪', '錦盆'], B: ['恩琪', '一休'] };
             const days = [];
@@ -270,133 +241,132 @@
             const itinerary = ref([]);
             const expenses = ref([]);
             const dayTitles = ref({});
-            const showExpModal = ref(false);
             const showItinModal = ref(false);
-            const showFullList = ref(false);
-            const showMenu = ref(false);
-            const showCopySelector = ref(false);
+            const showExpModal = ref(false);
+            const showCopyModal = ref(false);
+            const activeMenuId = ref(null);
             const isEdit = ref(false);
+            const itinForm = ref({});
+            const expForm = ref({});
             const suggestions = ref([]);
-            const form = ref({ targetMembers: [] });
-            const itinForm = ref({ category: '景點', note: '' });
-            const expenseFilter = ref('all');
+            const copySource = ref(null);
 
-            let map = null, markersLayer = L.layerGroup();
-
-            const saveToCloud = () => {
+            const sync = () => {
                 if(!isLoaded.value) return;
                 set(dbRef(db, 'travel2026'), { 
                     itinerary: JSON.parse(JSON.stringify(itinerary.value)), 
                     expenses: JSON.parse(JSON.stringify(expenses.value)), 
-                    dayTitles: dayTitles.value, 
-                    eurRate: eurRate.value 
+                    dayTitles: dayTitles.value 
+                });
+            };
+
+            onMounted(() => {
+                // 防當機防護傘：無論資料讀取結果如何，0.5秒後強行解除讀取畫面
+                setTimeout(() => { isLoaded.value = true; }, 500);
+
+                onValue(dbRef(db, 'travel2026'), (snap) => {
+                    const d = snap.val() || {};
+                    // 資料格式保護：確保從雲端讀下來的資料都是正確的陣列
+                    itinerary.value = Array.isArray(d.itinerary) ? d.itinerary : Object.values(d.itinerary || {});
+                    expenses.value = Array.isArray(d.expenses) ? d.expenses : Object.values(d.expenses || {});
+                    dayTitles.value = d.dayTitles || {};
+                    isLoaded.value = true;
+                    nextTick(() => initSortable());
+                });
+            });
+
+            const initSortable = () => {
+                const el = document.getElementById('itin-list');
+                if(!el) return;
+                Sortable.create(el, {
+                    animation: 200, delay: 400, delayOnTouchOnly: true,
+                    ghostClass: 'sortable-ghost',
+                    onEnd: (evt) => {
+                        const list = itinerary.value.filter(i => i.day === currentDay.value).sort((a,b)=>a.time.localeCompare(b.time));
+                        const [moved] = list.splice(evt.oldIndex, 1);
+                        list.splice(evt.newIndex, 0, moved);
+                        sync();
+                    }
                 });
             };
 
             const fetchSuggestions = async () => {
-                if (itinForm.value.location.length < 2) { suggestions.value = []; return; }
-                const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${itinForm.value.location}&limit=5`);
-                suggestions.value = await r.json();
+                if (itinForm.value.location.length < 2) return;
+                try {
+                    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${itinForm.value.location}&limit=5`);
+                    suggestions.value = await r.json();
+                } catch(e) {}
             };
-
             const selectSuggestion = (s) => {
                 itinForm.value.location = s.display_name.split(',')[0];
                 itinForm.value.lat = s.lat; itinForm.value.lon = s.lon;
                 suggestions.value = [];
             };
 
-            const openAddItin = () => { isEdit.value = false; showMenu.value = false; itinForm.value = { id: Date.now(), location: '', time: '10:00', group: 'all', category: '景點', day: currentDay.value, note: '' }; showItinModal.value = true; };
-            const openEditItem = (item) => { isEdit.value = true; itinForm.value = JSON.parse(JSON.stringify(item)); showMenu.value = false; showItinModal.value = true; };
-            const openCopySelector = () => { showMenu.value = false; showCopySelector.value = true; };
-            const copyToDay = (targetDay) => {
-                itinerary.value.push({ ...itinForm.value, id: Date.now(), day: targetDay });
-                saveToCloud(); showCopySelector.value = false; showItinModal.value = false;
-            };
-
-            const saveItin = async () => {
+            const openAddItin = () => { isEdit.value = false; activeMenuId.value = null; itinForm.value = { id: Date.now(), location: '', time: '10:00', group: 'all', category: '景點', day: currentDay.value, note: '' }; showItinModal.value = true; };
+            const openEditItem = (item) => { isEdit.value = true; itinForm.value = JSON.parse(JSON.stringify(item)); showItinModal.value = true; };
+            const saveItin = () => {
                 const idx = itinerary.value.findIndex(i => i.id === itinForm.value.id);
                 if(idx > -1) itinerary.value[idx] = itinForm.value; else itinerary.value.push(itinForm.value);
-                saveToCloud(); showItinModal.value = false;
+                sync(); showItinModal.value = false;
             };
+            const delItin = (id) => { itinerary.value = itinerary.value.filter(i => i.id !== id); sync(); activeMenuId.value = null; };
+            const openCopy = (item) => { copySource.value = item; showCopyModal.value = true; activeMenuId.value = null; };
+            const confirmCopy = (day) => { itinerary.value.push({...copySource.value, id: Date.now(), day}); sync(); showCopyModal.value = false; };
 
-            const delItin = () => { itinerary.value = itinerary.value.filter(i => i.id !== itinForm.value.id); saveToCloud(); showItinModal.value = false; showMenu.value = false; };
-
-            const openAddExp = () => { isEdit.value = false; form.value = { id: Date.now(), title: '', originalAmount: 0, payer: '媽媽', targetMembers: [...members], date: selDate.value, rate: eurRate.value }; showExpModal.value = true; };
-            const openEditExp = (exp) => { isEdit.value = true; form.value = JSON.parse(JSON.stringify(exp)); showExpModal.value = true; };
+            const openAddExp = () => { expForm.value = { id: Date.now(), title: '', amount: 0, currency: 'EUR', rate: 37, payer: '媽媽', targets: [...members], date: selDate.value }; showExpModal.value = true; };
+            const toggleTarget = (m) => {
+                const i = expForm.value.targets.indexOf(m);
+                if(i > -1) expForm.value.targets.splice(i, 1); else expForm.value.targets.push(m);
+            };
+            const quickSelect = (g) => expForm.value.targets = [...groups[g]];
             const saveExp = () => {
-                const data = { ...form.value, twdAmount: (form.value.originalAmount || 0) * (form.value.rate || eurRate.value) };
-                const idx = expenses.value.findIndex(e => e.id === data.id);
-                if(idx > -1) expenses.value[idx] = data; else expenses.value.push(data);
-                saveToCloud(); showExpModal.value = false;
-            };
-
-            const toggleM = (m) => {
-                if(!form.value.targetMembers) form.value.targetMembers = [];
-                const idx = form.value.targetMembers.indexOf(m);
-                if(idx > -1) form.value.targetMembers.splice(idx, 1); else form.value.targetMembers.push(m);
+                const multi = expForm.currency === 'EUR' ? expForm.value.rate : 1;
+                expForm.value.twdAmount = expForm.value.amount * multi;
+                expenses.value.push(expForm.value);
+                sync(); showExpModal.value = false;
             };
 
             const switchTab = (tab) => {
                 activeTab.value = tab;
                 if(tab === 'map') {
                     nextTick(() => {
-                        if(!map) {
-                            map = L.map('map', { zoomControl: false }).setView([52.3, 4.9], 10);
-                            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
-                            markersLayer.addTo(map);
+                        if(!window.mapInstance) {
+                            window.mapInstance = L.map('map', { zoomControl: false }).setView([52.3, 4.9], 12);
+                            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(window.mapInstance);
+                            window.mLayer = L.layerGroup().addTo(window.mapInstance);
                         }
-                        map.invalidateSize();
-                        markersLayer.clearLayers();
-                        (itinerary.value || []).forEach(i => { if(i.lat) L.circleMarker([i.lat, i.lon], { color: i.group==='A'?'#3b82f6':'#f97316', radius: 8 }).addTo(markersLayer); });
+                        window.mapInstance.invalidateSize();
+                        window.mLayer.clearLayers();
+                        itinerary.value.forEach(i => { if(i.lat) L.circleMarker([i.lat, i.lon], { color: i.group==='A'?'#3b82f6':'#f97316', radius: 8, fillOpacity: 0.8 }).addTo(window.mLayer); });
                     });
                 }
             };
 
-            onMounted(() => {
-                // 強制解鎖防線
-                setTimeout(() => { isLoaded.value = true; }, 1000);
-
-                onValue(dbRef(db, 'travel2026'), (snap) => {
-                    const d = snap.val() || {};
-                    // 強制轉陣列防禦
-                    itinerary.value = Array.isArray(d.itinerary) ? d.itinerary : Object.values(d.itinerary || {});
-                    expenses.value = Array.isArray(d.expenses) ? d.expenses : Object.values(d.expenses || {});
-                    dayTitles.value = d.dayTitles || {};
-                    eurRate.value = d.eurRate || 37;
-                    isLoaded.value = true;
-                });
-            });
-
             return {
-                activeTab, isLoaded, currentDay, selDate, itinerary, expenses, members, days, showExpModal, showItinModal, isEdit, form, itinForm, dayTitles, eurRate, suggestions, showMenu, showCopySelector, showFullList, expenseFilter,
-                sortedExpenses: computed(() => (expenses.value || []).filter(e => expenseFilter.value === 'all' || (e.targetMembers || []).some(m => groups[expenseFilter.value].includes(m))).sort((a,b)=>b.date.localeCompare(a.date))),
-                filteredTotalTWD: computed(() => (expenses.value || []).filter(e => expenseFilter.value === 'all' || (e.targetMembers || []).some(m => groups[expenseFilter.value].includes(m))).reduce((s, e) => s + (e.twdAmount || 0), 0)),
-                filteredItinerary: computed(() => (itinerary.value || []).filter(i => i.day === currentDay.value).sort((a,b)=>a.time.localeCompare(b.time))),
-                getMemberBalance: (m) => {
-                    let bal = 0;
-                    (expenses.value || []).forEach(e => {
-                        const tgts = e.targetMembers || [];
-                        if (e.payer === m) bal += (e.twdAmount * (1 - 1/tgts.length));
-                        else if (tgts.includes(m)) bal -= (e.twdAmount / tgts.length);
+                isLoaded, activeTab, currentDay, selDate, itinerary, expenses, members, days, showItinModal, showExpModal, showCopyModal, isEdit, itinForm, expForm, dayTitles, suggestions, activeMenuId,
+                calYear: computed(() => calDate.value.getFullYear()), calMonth: computed(() => calDate.value.getMonth()),
+                filteredItinerary: computed(() => itinerary.value.filter(i => i.day === currentDay.value).sort((a,b)=>a.time.localeCompare(b.time))),
+                totalTWD: computed(() => expenses.value.reduce((s, e) => s + (e.twdAmount || 0), 0)),
+                getBalance: (m) => {
+                    let b = 0;
+                    expenses.value.forEach(e => {
+                        const tgts = e.targets || [];
+                        if(e.payer === m) b += (e.twdAmount - (e.twdAmount / (tgts.length || 1)));
+                        else if(tgts.includes(m)) b -= (e.twdAmount / (tgts.length || 1));
                     });
-                    return bal;
+                    return b;
                 },
                 calendarDays: computed(() => {
                     const y = calDate.value.getFullYear(), m = calDate.value.getMonth();
                     const first = new Date(y, m, 1).getDay(), last = new Date(y, m+1, 0).getDate();
                     let arr = []; for(let i=0; i<first; i++) arr.push(null);
-                    for(let i=1; i<=last; i++) {
-                        const dStr = `${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
-                        arr.push({ day: i, date: dStr, hasExpense: (expenses.value || []).some(e => e.date === dStr) });
-                    }
+                    for(let i=1; i<=last; i++) arr.push({ day: i, date: `${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}` });
                     return arr;
                 }),
-                calYear: computed(()=>calDate.value.getFullYear()), calMonth: computed(()=>calDate.value.getMonth()),
-                getGroupName: (g) => ({all:'全體', A:'荷蘭組', B:'三小國組'}[g]), getGroupBg: (g) => ({all:'bg-slate-900', A:'bg-blue-600', B:'bg-orange-500'}[g]),
-                getGroupBorder: (g) => ({all:'border-l-slate-900', A:'border-l-blue-600', B:'border-l-orange-500'}[g]),
-                switchTab, openAddExp, openEditExp, openAddItin, openEditItem, saveItin, delItin, toggleM, saveExp, fetchSuggestions, selectSuggestion, openCopySelector, copyToDay,
+                switchTab, openAddItin, openEditItem, saveItin, delItin, openCopy, confirmCopy, openAddExp, toggleTarget, quickSelect, saveExp, fetchSuggestions, selectSuggestion,
                 changeMonth: (v) => calDate.value = new Date(calDate.value.setMonth(calDate.value.getMonth()+v)),
-                updateDayTitle: (e) => { dayTitles.value[currentDay.value.replace('/','_')] = e.target.value; saveToCloud(); }
+                updateDayTitle: (e) => { dayTitles.value[currentDay.value.replace('/','_')] = e.target.value; sync(); }
             };
         }
     }).mount('#app');
