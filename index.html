@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2026家庭歐洲行 (總帳展開版)</title>
+    <title>2026家庭歐洲行 (分帳進化版)</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -265,7 +265,10 @@
                             <div>
                                 <div class="flex items-center gap-2">
                                     <p class="font-bold text-slate-800">{{ exp.title }}</p>
-                                    <span class="text-[10px] px-1.5 py-0.5 rounded text-white font-bold" :class="getGroupColor(exp.splitGroup || 'all')">{{ getSplitLabel(exp.splitGroup) }}</span>
+                                    <span v-if="exp.targetMembers && exp.targetMembers.length > 0 && exp.targetMembers.length < 5" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold border border-slate-200">
+                                        {{ exp.targetMembers.join(', ') }}
+                                    </span>
+                                    <span v-else class="text-[10px] px-1.5 py-0.5 rounded text-white font-bold" :class="getGroupColor(exp.splitGroup || 'all')">{{ getSplitLabel(exp.splitGroup, exp.targetMembers) }}</span>
                                 </div>
                                 <div class="flex gap-2 items-center text-[10px] text-slate-400 mt-1 font-medium">
                                     <span>{{ exp.payer }} 先付 ({{ exp.currency }} {{ exp.originalAmount }})</span>
@@ -457,7 +460,7 @@
     </div>
 
     <div v-if="showExpenseModal" class="fixed inset-0 bg-slate-900/40 z-[2000] flex items-end sm:items-center justify-center backdrop-blur-sm p-4">
-        <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-bounce-up shadow-2xl relative">
+        <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-bounce-up shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-xl font-extrabold text-slate-800">{{ isEditingExpense ? '編輯支出' : '新增支出' }}</h3>
                 <button @click="showExpenseModal = false" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 flex items-center justify-center transition">
@@ -491,18 +494,34 @@
                         <span class="text-xs text-yellow-600 font-medium">TWD</span>
                     </div>
                 </div>
-                <div v-if="newExpense.currency !== 'TWD'" class="text-right text-xs font-bold text-slate-400">試算約: NT$ {{ Math.round(newExpense.originalAmount * newExpense.customRate).toLocaleString() }}</div>
+                
                 <div class="pt-2 border-t border-slate-50 mt-2">
-                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">分攤給誰？</label>
-                    <div class="flex gap-2">
-                        <button v-for="(name, key) in groups" :key="key" @click="newExpense.splitGroup = key" :class="['flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border', newExpense.splitGroup === key ? getGroupBtnColor(key) + ' shadow-md scale-[1.02]' : 'border-slate-200 text-slate-400 hover:border-slate-300']">{{ name }}</button>
-                    </div>
-                </div>
-                <div class="pt-2">
-                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">誰先付錢？</label>
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">收錢者 (先付錢的人)</label>
                     <div class="flex gap-2 flex-wrap">
                         <button v-for="m in members" @click="newExpense.payer = m" :class="['px-3 py-2 rounded-lg text-xs font-bold border transition-all', newExpense.payer === m ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'border-slate-200 text-slate-500 hover:border-slate-400']">{{ m }}</button>
                     </div>
+                </div>
+
+                <div class="pt-2">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">分攤給誰？ (可複選)</label>
+                        <div class="flex gap-1">
+                            <button @click="quickSelect('all')" class="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded hover:bg-slate-200 font-bold">全選</button>
+                            <button @click="quickSelect('A')" class="text-[10px] bg-teal-50 text-teal-600 px-2 py-1 rounded hover:bg-teal-100 font-bold">荷蘭</button>
+                            <button @click="quickSelect('B')" class="text-[10px] bg-orange-50 text-orange-600 px-2 py-1 rounded hover:bg-orange-100 font-bold">三小國</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button v-for="m in members" 
+                                :key="m" 
+                                @click="toggleMember(m)" 
+                                :class="['py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1', 
+                                         newExpense.targetMembers.includes(m) ? 'bg-blue-500 text-white border-blue-500 shadow-md scale-[1.02]' : 'border-slate-200 text-slate-400 hover:border-slate-300']">
+                            <i v-if="newExpense.targetMembers.includes(m)" data-lucide="check" class="w-3 h-3"></i>
+                            {{ m }}
+                        </button>
+                    </div>
+                    <p v-if="newExpense.targetMembers.length === 0" class="text-xs text-red-400 mt-1 font-bold text-center">⚠️ 請至少選擇一人</p>
                 </div>
             </div>
             <div class="flex gap-3 mt-8 pt-4 border-t border-slate-100">
@@ -540,7 +559,7 @@
             const showCopySelector = ref(false);
             const showMenu = ref(false);
             const showSettlement = ref(false);
-            const showAllExpenses = ref(false); // 新增：控制所有帳目展開的變數
+            const showAllExpenses = ref(false);
             const isEditing = ref(false);
             const isEditingExpense = ref(false);
             const dayTitles = ref({}); 
@@ -569,7 +588,8 @@
             const defaultRate = 34.5;
 
             const editingItem = ref({ id: null, time: '10:00', location: '', note: '', group: 'all', type: 'spot', durationMinutes: 60, travelMinutes: 30 });
-            const newExpense = ref({ id: null, title: '', originalAmount: '', currency: 'EUR', customRate: defaultRate, payer: '媽媽', splitGroup: 'all', date: '' });
+            // 新增 targetMembers 陣列
+            const newExpense = ref({ id: null, title: '', originalAmount: '', currency: 'EUR', customRate: defaultRate, payer: '媽媽', splitGroup: 'all', targetMembers: [], date: '' });
 
             let mapInstance = null, markerLayer = L.layerGroup(), polylineLayer = L.layerGroup(), sortableInstance = null;
             let searchTimeout = null;
@@ -593,14 +613,13 @@
 
             const totalExpenseTWD = computed(() => expenses.value.reduce((sum, item) => sum + item.twdAmount, 0));
             
-            // 新增：排序所有支出 (日期新 -> 舊)
             const sortedAllExpenses = computed(() => {
                 return [...expenses.value].sort((a, b) => {
                     const dateA = new Date(a.date || '1970-01-01');
                     const dateB = new Date(b.date || '1970-01-01');
                     if (dateA > dateB) return -1;
                     if (dateA < dateB) return 1;
-                    return b.id - a.id; // 如果日期相同，新的(ID大)排前面
+                    return b.id - a.id;
                 });
             });
 
@@ -664,12 +683,20 @@
                 saveToCloud();
             };
 
+            // 修正分帳邏輯：優先使用 targetMembers，如果沒有才用 splitGroup (兼容舊資料)
             const balanceList = computed(() => {
                 let balances = {}; 
                 members.value.forEach(m => balances[m] = 0);
                 expenses.value.forEach(ex => {
-                    const targetMembers = groupMembers[ex.splitGroup || 'all']; 
-                    if (!targetMembers) return;
+                    let targetMembers = [];
+                    if (ex.targetMembers && ex.targetMembers.length > 0) {
+                        targetMembers = ex.targetMembers;
+                    } else {
+                        targetMembers = groupMembers[ex.splitGroup || 'all'] || [];
+                    }
+                    
+                    if (targetMembers.length === 0) return;
+                    
                     let splitAmount = ex.twdAmount / targetMembers.length;
                     
                     if(balances[ex.payer] !== undefined) balances[ex.payer] += ex.twdAmount;
@@ -881,13 +908,19 @@
                 isEditingExpense.value = false;
                 const dateToUse = selectedExpenseDate.value || new Date().toISOString().split('T')[0];
                 let lastRate = newExpense.value.customRate || defaultRate;
-                newExpense.value = { id: null, title: '', originalAmount: '', currency: 'EUR', customRate: lastRate, payer: '媽媽', splitGroup: 'all', date: dateToUse };
+                // 預設全選
+                newExpense.value = { id: null, title: '', originalAmount: '', currency: 'EUR', customRate: lastRate, payer: '媽媽', splitGroup: 'all', targetMembers: [...members.value], date: dateToUse };
                 showExpenseModal.value = true;
             };
 
             const openEditExpenseModal = (exp) => {
                 isEditingExpense.value = true;
-                newExpense.value = JSON.parse(JSON.stringify(exp));
+                const data = JSON.parse(JSON.stringify(exp));
+                // 兼容舊資料：如果沒有 targetMembers，就從 splitGroup 轉換
+                if (!data.targetMembers || data.targetMembers.length === 0) {
+                    data.targetMembers = groupMembers[data.splitGroup || 'all'] || [];
+                }
+                newExpense.value = data;
                 showExpenseModal.value = true;
             };
 
@@ -924,18 +957,45 @@
                 window.open(url, '_blank'); 
             };
 
+            // 新增：切換選取成員
+            const toggleMember = (m) => {
+                if (newExpense.value.targetMembers.includes(m)) {
+                    newExpense.value.targetMembers = newExpense.value.targetMembers.filter(tm => tm !== m);
+                } else {
+                    newExpense.value.targetMembers.push(m);
+                }
+            };
+
+            // 新增：快速選取
+            const quickSelect = (type) => {
+                if (type === 'all') newExpense.value.targetMembers = [...members.value];
+                else if (type === 'A') newExpense.value.targetMembers = ['媽媽', '佩琪', '錦盆'];
+                else if (type === 'B') newExpense.value.targetMembers = ['恩琪', '一休'];
+            };
+
             const submitExpense = () => { 
                 if(!newExpense.value.title || !newExpense.value.originalAmount) return; 
+                if(newExpense.value.targetMembers.length === 0) { alert('請至少選擇一位分攤對象'); return; }
+
                 const rate = newExpense.value.currency === 'TWD' ? 1 : newExpense.value.customRate; 
                 const finalAmount = Math.round(newExpense.value.originalAmount * rate);
+
+                const expenseData = {
+                    ...newExpense.value,
+                    rate: rate,
+                    twdAmount: finalAmount,
+                    // 為了方便顯示，還是保留一個大概的 splitGroup 標記，但不影響計算
+                    splitGroup: newExpense.value.targetMembers.length === members.value.length ? 'all' : 'custom'
+                };
 
                 if (isEditingExpense.value) {
                     const index = expenses.value.findIndex(e => e.id === newExpense.value.id);
                     if (index !== -1) {
-                        expenses.value[index] = { ...newExpense.value, rate: rate, twdAmount: finalAmount };
+                        // 使用 splice 確保 Vue 能偵測到陣列內部的變更 (解決編輯無效的 Bug)
+                        expenses.value.splice(index, 1, expenseData);
                     }
                 } else {
-                    expenses.value.push({ id: Date.now(), ...newExpense.value, rate: rate, twdAmount: finalAmount });
+                    expenses.value.push({ id: Date.now(), ...expenseData });
                 }
                 saveToCloud(); 
                 showExpenseModal.value = false; 
@@ -953,11 +1013,19 @@
             
             const editDayName = (idx) => { const n = prompt('日期', days.value[idx]); if(n) { days.value[idx]=n; saveToCloud(); }};
             
-            const getGroupColor = (g) => ({all:'bg-blue-500', A:'bg-teal-500', B:'bg-orange-500'}[g]);
-            const getGroupBorderLeft = (g) => ({all:'border-l-blue-500', A:'border-l-teal-500', B:'border-l-orange-500'}[g]);
+            const getGroupColor = (g) => ({all:'bg-blue-500', A:'bg-teal-500', B:'bg-orange-500', custom: 'bg-purple-500'}[g] || 'bg-slate-400');
+            const getGroupBorderLeft = (g) => ({all:'border-l-blue-500', A:'border-l-teal-500', B:'border-l-orange-500', custom: 'border-l-purple-500'}[g] || 'border-l-slate-400');
             const getGroupBtnColor = (g) => ({all:'bg-blue-500 text-white border-blue-500', A:'bg-teal-500 text-white border-teal-500', B:'bg-orange-500 text-white border-orange-500'}[g]);
             const getGroupName = (g) => groups.value[g];
-            const getSplitLabel = (g) => ({all:'全體', A:'荷蘭組', B:'三小國組'}[g]);
+            // 顯示分帳標籤邏輯更新
+            const getSplitLabel = (g, targets) => {
+                if (targets && targets.length > 0) {
+                    if (targets.length === members.value.length) return '全體';
+                    if (targets.length === 1) return targets[0];
+                    return `指定${targets.length}人`;
+                }
+                return ({all:'全體', A:'荷蘭組', B:'三小國組'}[g]);
+            };
             const getIcon = (t) => ({itinerary:'calendar', map:'map', expenses:'wallet'}[t]);
             const getLabel = (t) => ({itinerary:'行程', map:'地圖', expenses:'分帳'}[t]);
             const switchTab = (t) => activeTab.value = t;
@@ -1002,7 +1070,8 @@
                 currentCalendarYear, currentCalendarMonth, calendarDays, changeMonth, selectExpenseDate, selectedExpenseDate, dailyExpenses, dailyTotal, formatDate,
                 openAddModal, openEditModal, saveItem, deleteItem, openGoogleMapsRoute, submitExpense, deleteExpense, 
                 addDay, removeDay, editDayName, saveToCloud, searchLocation, selectSuggestion, setMapMode, setMapGroupMode, openAddExpenseModal, openEditExpenseModal, copyToDay, toggleMenu,
-                getGroupColor, getGroupBorderLeft, getGroupName, getGroupBtnColor, getSplitLabel, getIcon, getLabel, switchTab, getSafeKey, updateDayTitle
+                getGroupColor, getGroupBorderLeft, getGroupName, getGroupBtnColor, getSplitLabel, getIcon, getLabel, switchTab, getSafeKey, updateDayTitle,
+                toggleMember, quickSelect
             };
         }
     }).mount('#app');
