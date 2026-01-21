@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>2026家庭歐洲行 (月曆記帳版)</title>
+    <title>2026家庭歐洲行 (最終完整版)</title>
     
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -37,10 +37,6 @@
         .custom-marker { transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
         .custom-marker:hover { transform: scale(1.2); z-index: 1000 !important; }
 
-        /* 選單動畫 */
-        .menu-enter-active, .menu-leave-active { transition: all 0.2s ease; }
-        .menu-enter-from, .menu-leave-to { opacity: 0; transform: translateY(-10px) scale(0.95); }
-        
         /* 月曆樣式 */
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
         .calendar-cell { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 12px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s; position: relative; border: 1px solid transparent; }
@@ -50,6 +46,10 @@
         .calendar-cell.selected.has-expense::after { background-color: #fff; }
         .calendar-cell.today { border-color: #3b82f6; color: #3b82f6; }
         .calendar-cell.today.selected { border-color: transparent; color: white; }
+
+        /* 選單動畫 */
+        .menu-enter-active, .menu-leave-active { transition: all 0.2s ease; }
+        .menu-enter-from, .menu-leave-to { opacity: 0; transform: translateY(-10px) scale(0.95); }
     </style>
 </head>
 <body>
@@ -91,7 +91,7 @@
     <main class="flex-1 overflow-y-auto pb-24 scroll-smooth no-scrollbar bg-slate-50 relative">
         
         <div v-show="activeTab === 'itinerary'" class="min-h-full">
-            <div class="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm pt-3 pb-4 px-4 border-b border-slate-200">
+            <div class="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm pt-3 pb-2 px-4 border-b border-slate-200 flex flex-col gap-3">
                 <div class="flex gap-2 overflow-x-auto no-scrollbar snap-x items-center pl-1">
                     <button v-for="(day, idx) in days" :key="idx" @click="currentDay = day" @dblclick="editDayName(idx)"
                         :class="['snap-center flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all transform duration-200', currentDay === day ? 'bg-slate-800 text-white shadow-md scale-100' : 'bg-white text-slate-400 border border-slate-200 active:scale-95']">
@@ -105,13 +105,21 @@
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                 </div>
+
+                <div class="flex justify-center pb-1">
+                    <div class="bg-white rounded-lg shadow-sm border border-slate-200 p-1 flex gap-1">
+                        <button @click="itineraryGroupMode = 'all'" :class="['px-3 py-1.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1', itineraryGroupMode === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-50']"><i data-lucide="list" class="w-3 h-3"></i> 全行程</button>
+                        <button @click="itineraryGroupMode = 'A'" :class="['px-3 py-1.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1', itineraryGroupMode === 'A' ? 'bg-teal-500 text-white' : 'text-slate-400 hover:bg-slate-50']"><div class="w-1.5 h-1.5 rounded-full bg-teal-500" v-if="itineraryGroupMode!=='A'"></div> 荷蘭組</button>
+                        <button @click="itineraryGroupMode = 'B'" :class="['px-3 py-1.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1', itineraryGroupMode === 'B' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:bg-slate-50']"><div class="w-1.5 h-1.5 rounded-full bg-orange-500" v-if="itineraryGroupMode!=='B'"></div> 三小國</button>
+                    </div>
+                </div>
             </div>
 
             <div id="itinerary-list" class="px-5 py-6 space-y-5 min-h-[300px]">
                 <div v-if="filteredItinerary.length === 0" class="text-center py-16 text-slate-300 no-sort flex flex-col items-center">
                     <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3 text-slate-300"><i data-lucide="calendar" class="w-8 h-8"></i></div>
-                    <p class="font-bold">本日無行程</p>
-                    <p class="text-xs mt-1">點擊右下角 + 開始規劃</p>
+                    <p class="font-bold">目前無行程</p>
+                    <p class="text-xs mt-1">點擊右下角 + 或切換組別</p>
                 </div>
                 <div v-for="(item, index) in filteredItinerary" :key="item.id" :data-id="item.id" class="itinerary-item relative group">
                     <div v-if="index > 0 && item.travelTime" class="absolute -top-[22px] left-0 right-0 flex justify-center z-0">
@@ -278,17 +286,14 @@
 
     <div v-if="showEditModal" class="fixed inset-0 bg-slate-900/40 z-[2000] flex items-end sm:items-center justify-center backdrop-blur-sm p-3 sm:p-4">
         <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-bounce-up shadow-2xl max-h-[90vh] overflow-y-auto relative">
-            
             <div v-if="!showCopySelector">
                 <div class="flex justify-between items-center mb-6 relative z-50">
                     <h3 class="text-xl font-extrabold text-slate-800">{{ isEditing ? '編輯行程' : '新增行程' }}</h3>
-                    
                     <div class="flex items-center gap-2">
                         <div v-if="isEditing" class="relative">
                             <button @click.stop="toggleMenu" class="w-10 h-10 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center transition shadow-sm">
                                 <i data-lucide="more-horizontal" class="w-5 h-5"></i>
                             </button>
-                            
                             <transition name="menu">
                                 <div v-if="showMenu" class="absolute right-0 top-full mt-2 w-40 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-[100] ring-1 ring-black ring-opacity-5">
                                     <button @click="showCopySelector = true; showMenu = false" class="w-full text-left px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-50">
@@ -300,7 +305,6 @@
                                 </div>
                             </transition>
                         </div>
-
                         <button @click="showEditModal = false" class="w-10 h-10 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 flex items-center justify-center transition shadow-sm">
                             <i data-lucide="x" class="w-5 h-5"></i>
                         </button>
@@ -369,7 +373,6 @@
 
                     <div>
                         <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">類型與備註</label>
-                        
                         <div class="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
                             <label class="flex-1 cursor-pointer">
                                 <input type="radio" v-model="editingItem.type" value="spot" class="hidden peer">
@@ -390,7 +393,6 @@
                                 </div>
                             </label>
                         </div>
-                        
                         <textarea v-model="editingItem.note" rows="2" class="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl outline-none focus:ring-2 focus:ring-slate-800 text-sm" placeholder="輸入備註事項..."></textarea>
                     </div>
                 </div>
@@ -409,7 +411,6 @@
                     <h3 class="text-xl font-extrabold text-slate-800">複製到哪一天？</h3>
                     <p class="text-xs text-slate-400 mt-1">請選擇目標日期</p>
                 </div>
-                
                 <div class="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto mb-6 p-1">
                     <button v-for="day in days" :key="day" @click="copyToDay(day)" class="p-4 rounded-2xl border-2 border-slate-100 text-sm font-bold hover:border-slate-800 hover:bg-slate-50 transition text-left flex flex-col items-center justify-center gap-1 relative group">
                         <span class="text-slate-800">{{ day }}</span>
@@ -418,20 +419,17 @@
                 </div>
                 <button @click="showCopySelector = false" class="w-full py-3.5 text-slate-500 bg-slate-100 rounded-xl font-bold hover:bg-slate-200 transition">取消返回</button>
             </div>
-
         </div>
     </div>
 
     <div v-if="showExpenseModal" class="fixed inset-0 bg-slate-900/40 z-[2000] flex items-end sm:items-center justify-center backdrop-blur-sm p-4">
         <div class="bg-white w-full max-w-sm rounded-3xl p-6 animate-bounce-up shadow-2xl relative">
-            
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-xl font-extrabold text-slate-800">{{ isEditingExpense ? '編輯支出' : '新增支出' }}</h3>
                 <button @click="showExpenseModal = false" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 flex items-center justify-center transition">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
-
             <div class="space-y-4">
                 <div>
                      <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">日期</label>
@@ -441,7 +439,6 @@
                     <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">項目名稱</label>
                     <input v-model="newExpense.title" placeholder="例如：超市採買" class="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl outline-none font-bold text-slate-700 placeholder-slate-300">
                 </div>
-                
                 <div class="flex gap-2 items-end">
                      <div class="w-24">
                         <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">幣別</label>
@@ -452,7 +449,6 @@
                         <input v-model.number="newExpense.originalAmount" type="number" placeholder="0.00" class="w-full bg-slate-50 border border-slate-100 p-3 rounded-xl outline-none font-bold text-xl text-slate-800 h-[50px]">
                      </div>
                 </div>
-
                 <div v-if="newExpense.currency !== 'TWD'" class="bg-yellow-50 border border-yellow-100 p-3 rounded-xl flex justify-between items-center">
                     <label class="text-xs text-yellow-700 font-bold flex items-center gap-1"><i data-lucide="arrow-left-right" class="w-3 h-3"></i> 匯率</label>
                     <div class="flex items-center gap-2">
@@ -462,20 +458,12 @@
                     </div>
                 </div>
                 <div v-if="newExpense.currency !== 'TWD'" class="text-right text-xs font-bold text-slate-400">試算約: NT$ {{ Math.round(newExpense.originalAmount * newExpense.customRate).toLocaleString() }}</div>
-                
                 <div class="pt-2 border-t border-slate-50 mt-2">
                     <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">分攤給誰？</label>
                     <div class="flex gap-2">
-                        <button v-for="(name, key) in groups" 
-                                :key="key" 
-                                @click="newExpense.splitGroup = key" 
-                                :class="['flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border', 
-                                         newExpense.splitGroup === key ? getGroupBtnColor(key) + ' shadow-md scale-[1.02]' : 'border-slate-200 text-slate-400 hover:border-slate-300']">
-                            {{ name }}
-                        </button>
+                        <button v-for="(name, key) in groups" :key="key" @click="newExpense.splitGroup = key" :class="['flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border', newExpense.splitGroup === key ? getGroupBtnColor(key) + ' shadow-md scale-[1.02]' : 'border-slate-200 text-slate-400 hover:border-slate-300']">{{ name }}</button>
                     </div>
                 </div>
-
                 <div class="pt-2">
                     <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">誰先付錢？</label>
                     <div class="flex gap-2 flex-wrap">
@@ -483,7 +471,6 @@
                     </div>
                 </div>
             </div>
-            
             <div class="flex gap-3 mt-8 pt-4 border-t border-slate-100">
                 <button v-if="isEditingExpense" @click="deleteExpense(newExpense.id)" class="px-5 py-3.5 bg-red-50 text-red-500 rounded-xl font-bold hover:bg-red-100 transition flex items-center justify-center"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
                 <button v-else @click="showExpenseModal = false" class="flex-1 py-3.5 bg-slate-100 text-slate-500 rounded-xl font-bold hover:bg-slate-200 transition">取消</button>
@@ -491,7 +478,6 @@
             </div>
         </div>
     </div>
-
 </div>
 
 <script type="module">
@@ -519,7 +505,7 @@
             const showExpenseModal = ref(false);
             const showCopySelector = ref(false);
             const showMenu = ref(false);
-            const showSettlement = ref(false); // 結算區折疊狀態
+            const showSettlement = ref(false);
             const isEditing = ref(false);
             const isEditingExpense = ref(false);
             const dayTitles = ref({}); 
@@ -529,10 +515,10 @@
             
             const mapMode = ref('single');
             const mapGroupMode = ref('all');
+            const itineraryGroupMode = ref('all'); // 新增：行程分組模式
             
-            // 月曆相關狀態
-            const calendarDate = ref(new Date(2026, 2, 1)); // 預設 2026年3月
-            const selectedExpenseDate = ref(new Date().toISOString().split('T')[0]); // 預設今天或旅程第一天
+            const calendarDate = ref(new Date(2026, 2, 1)); 
+            const selectedExpenseDate = ref(new Date().toISOString().split('T')[0]); 
 
             const memberConfig = ['媽媽', '佩琪', '錦盆', '恩琪', '一休'];
             const groupConfig = { all: '全體', A: '荷蘭組', B: '三小國組' };
@@ -563,10 +549,21 @@
                 });
             };
 
-            const filteredItinerary = computed(() => itineraryItems.value.filter(i => i.day === currentDay.value).sort((a,b) => a.time.localeCompare(b.time)));
+            // 修改：加入行程分組邏輯
+            const filteredItinerary = computed(() => {
+                let items = itineraryItems.value.filter(i => i.day === currentDay.value);
+                
+                if (itineraryGroupMode.value === 'A') {
+                    items = items.filter(i => i.group === 'A' || i.group === 'all');
+                } else if (itineraryGroupMode.value === 'B') {
+                    items = items.filter(i => i.group === 'B' || i.group === 'all');
+                }
+
+                return items.sort((a,b) => a.time.localeCompare(b.time));
+            });
+
             const totalExpenseTWD = computed(() => expenses.value.reduce((sum, item) => sum + item.twdAmount, 0));
             
-            // --- 月曆邏輯 ---
             const currentCalendarYear = computed(() => calendarDate.value.getFullYear());
             const currentCalendarMonth = computed(() => calendarDate.value.getMonth());
 
@@ -579,7 +576,7 @@
             const calendarDays = computed(() => {
                 const year = currentCalendarYear.value;
                 const month = currentCalendarMonth.value;
-                const firstDay = new Date(year, month, 1).getDay(); // 0 = Sunday
+                const firstDay = new Date(year, month, 1).getDay();
                 const daysInMonth = new Date(year, month + 1, 0).getDate();
                 const todayStr = new Date().toISOString().split('T')[0];
                 
@@ -619,7 +616,6 @@
                 return `${parseInt(m)}/${parseInt(d)}`;
             };
             
-            // --- 結算邏輯 ---
             const getSafeKey = (date) => date.replace('/', '_');
 
             const updateDayTitle = (e) => {
@@ -843,7 +839,6 @@
             
             const openAddExpenseModal = () => {
                 isEditingExpense.value = false;
-                // 自動帶入月曆選中的日期
                 const dateToUse = selectedExpenseDate.value || new Date().toISOString().split('T')[0];
                 let lastRate = newExpense.value.customRate || defaultRate;
                 newExpense.value = { id: null, title: '', originalAmount: '', currency: 'EUR', customRate: lastRate, payer: '媽媽', splitGroup: 'all', date: dateToUse };
@@ -963,7 +958,7 @@
             return {
                 activeTab, showEditModal, showExpenseModal, isEditing, isEditingExpense, dayTitles, isLoaded, weatherInfo, showSettlement,
                 days, currentDay, members, groups, itineraryItems, expenses, editingItem, newExpense, filteredItinerary,
-                totalExpenseTWD, debts, balanceList, suggestions, mapMode, mapGroupMode, showCopySelector, showMenu,
+                totalExpenseTWD, debts, balanceList, suggestions, mapMode, mapGroupMode, itineraryGroupMode, showCopySelector, showMenu,
                 currentCalendarYear, currentCalendarMonth, calendarDays, changeMonth, selectExpenseDate, selectedExpenseDate, dailyExpenses, dailyTotal, formatDate,
                 openAddModal, openEditModal, saveItem, deleteItem, openGoogleMapsRoute, submitExpense, deleteExpense, 
                 addDay, removeDay, editDayName, saveToCloud, searchLocation, selectSuggestion, setMapMode, setMapGroupMode, openAddExpenseModal, openEditExpenseModal, copyToDay, toggleMenu,
