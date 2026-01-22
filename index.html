@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程 (V8 MapFix)</title>
+    <title>北歐旅程 (V9 SplitFix)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,8 +21,8 @@
         .sortable-ghost { opacity: 0.2; background: #bfdbfe; border: 2px dashed #3b82f6; }
         .sortable-drag { opacity: 0.9; transform: scale(1.02); cursor: grabbing; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-        /* 統計切換動畫 */
-        .slide-enter-active, .slide-leave-active { transition: all 0.3s ease; max-height: 200px; opacity: 1; overflow: hidden; }
+        /* 統計切換動畫 - 允許內容撐開 */
+        .slide-enter-active, .slide-leave-active { transition: all 0.3s ease; max-height: 500px; opacity: 1; overflow: hidden; }
         .slide-enter-from, .slide-leave-to { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
     </style>
 </head>
@@ -111,27 +111,25 @@
             <section v-if="activeTab === 'split'" class="p-4 space-y-4 pb-32">
                  <div class="bg-slate-900 text-white p-6 rounded-[2rem] shadow-xl overflow-hidden transition-all duration-300">
                     
-                    <div class="mb-4">
-                        <p class="text-[10px] opacity-60 uppercase tracking-widest mb-3 font-bold">應付帳款 (結算報告)</p>
+                    <div class="mb-2">
+                        <p class="text-[10px] opacity-60 uppercase tracking-widest mb-2 font-bold">結算報告 (應付帳款)</p>
                         
-                        <div v-if="settlements.length === 0" class="text-center text-sm opacity-50 py-2">目前帳目平衡，無須轉帳</div>
+                        <div v-if="settlements.length === 0" class="text-center text-xs opacity-50 py-2">目前帳目平衡，無須轉帳</div>
                         
-                        <div class="space-y-2">
-                            <div v-for="s in settlements" class="bg-white/10 px-3 py-2 rounded-lg flex items-center justify-between">
-                                <span class="text-sm font-bold flex items-center gap-2">
-                                    <span class="text-red-300">{{ s.from }}</span> 
-                                    <i class="fas fa-caret-right text-white/40"></i> 
-                                    <span class="text-green-300">{{ s.to }}</span>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div v-for="s in settlements" class="bg-white/10 px-2 py-2 rounded-lg flex flex-col items-center justify-center text-center">
+                                <span class="text-[10px] font-bold text-gray-300 mb-1">
+                                    {{ s.from }} <i class="fas fa-arrow-right text-[8px] mx-1"></i> {{ s.to }}
                                 </span>
-                                <span class="font-mono font-black text-blue-300">NT$ {{ Math.round(s.amount) }}</span>
+                                <span class="font-mono font-black text-blue-300 text-sm">NT$ {{ Math.round(s.amount) }}</span>
                             </div>
                         </div>
                     </div>
 
-                    <div @click="showStats = !showStats" class="border-t border-white/10 pt-3 mt-2 flex justify-between items-center cursor-pointer hover:bg-white/5 -mx-6 px-6 py-2 transition-colors">
+                    <div @click="showStats = !showStats" class="border-t border-white/10 pt-3 mt-4 flex justify-between items-center cursor-pointer hover:bg-white/5 -mx-6 px-6 py-2 transition-colors">
                         <div class="flex items-center gap-2">
                             <i class="fas fa-chart-pie text-xs opacity-70"></i>
-                            <span class="text-xs font-bold">查看總支出統計</span>
+                            <span class="text-xs font-bold">查看總支出統計與明細</span>
                         </div>
                         <i class="fas text-xs opacity-50 transition-transform duration-300" :class="showStats ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                     </div>
@@ -143,9 +141,26 @@
                                 <button @click.stop="statsFilter = 'holland'" :class="statsFilter === 'holland' ? 'bg-blue-500 text-white shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">荷蘭</button>
                                 <button @click.stop="statsFilter = 'baltic'" :class="statsFilter === 'baltic' ? 'bg-orange-500 text-white shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">三小國</button>
                             </div>
-                            <div class="text-center">
-                                <p class="text-[10px] opacity-60 uppercase">該組別累積總支出</p>
+                            
+                            <div class="text-center mb-4">
+                                <p class="text-[10px] opacity-60 uppercase">累積總支出</p>
                                 <p class="text-3xl font-black mt-1 text-yellow-400">NT$ {{ Math.round(statsTotal).toLocaleString() }}</p>
+                            </div>
+
+                            <div class="max-h-48 overflow-y-auto hide-scrollbar space-y-2 pr-1">
+                                <p class="text-[10px] opacity-40 uppercase font-bold sticky top-0 bg-slate-900 pb-1">詳細列表</p>
+                                <div v-for="item in statsExpenses" class="flex justify-between items-center bg-white/5 p-2 rounded text-xs">
+                                    <div class="flex flex-col text-left">
+                                        <span class="font-bold text-gray-200">{{ item.desc }}</span>
+                                        <span class="text-[9px] text-gray-500">{{ formatDate(item.date) }} · {{ item.payer }}</span>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="font-mono text-gray-300">
+                                            {{ item.currency === 'EUR' ? '€' + item.amount : 'NT$' + item.amount }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div v-if="statsExpenses.length === 0" class="text-center text-[10px] opacity-30 py-2">無資料</div>
                             </div>
                         </div>
                     </transition>
@@ -161,7 +176,7 @@
                 </div>
 
                 <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
-                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">選擇日期查看支出 ({{formatDate(selectedDate)}})</h3>
+                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">選擇日期查看當日支出 ({{formatDate(selectedDate)}})</h3>
                     <div class="calendar-grid mb-1">
                         <div v-for="d in ['日','一','二','三','四','五','六']" class="text-center text-[10px] text-slate-300 font-bold">{{d}}</div>
                     </div>
@@ -400,19 +415,21 @@
                     return list.sort((a, b) => a.time.localeCompare(b.time));
                 });
                 
-                // --- Map Fix & UI Logic ---
                 const filteredExpenses = computed(() => expenses.value.filter(e => e.date === selectedDate.value));
                 
-                // 統計計算 (依據分攤對象是否包含該組成員)
+                // 統計計算 (過濾出該組成員參與的帳目)
+                const statsExpenses = computed(() => {
+                    return expenses.value.filter(exp => {
+                         if (statsFilter.value === 'all') return true;
+                         const targetMembers = groupMembers[statsFilter.value];
+                         return exp.splitWith.some(m => targetMembers.includes(m));
+                    }).sort((a, b) => b.date.localeCompare(a.date)); // 日期新到舊
+                });
+
                 const statsTotal = computed(() => {
-                    return expenses.value.reduce((sum, exp) => {
+                    return statsExpenses.value.reduce((sum, exp) => {
                         const amt = exp.currency === 'EUR' ? exp.amount * (exp.rate || 37) : exp.amount;
-                        if (statsFilter.value === 'all') return sum + amt;
-                        const targetMembers = groupMembers[statsFilter.value];
-                        // 邏輯：只要該筆支出的「分攤對象」裡有該組成員，就計入該組的總開銷 (總額)
-                        // 若要更精確只算"該組的份額"，邏輯會更複雜，這裡先算"該組參與的總活動金額"
-                        const isInvolved = exp.splitWith.some(m => targetMembers.includes(m));
-                        return isInvolved ? sum + amt : sum;
+                        return sum + amt;
                     }, 0);
                 });
 
@@ -467,13 +484,12 @@
                     }
                 };
                 watch(activeTab, (val) => { if (val === 'map') nextTick(() => { initMap(); updateMap(); }); });
-                // 關鍵修復：監聽 filteredSchedule 變動，確保地圖即時更新
                 watch(filteredSchedule, () => { if (activeTab.value === 'map') nextTick(updateMap); }, { deep: true });
                 watch(selectedDate, () => { if (activeTab.value === 'schedule') nextTick(initSortable); });
 
                 return {
                     activeTab, currentGroup, selectedDate, dateRange, members, getGroupName, dbConnected, loading, errorMessage,
-                    filteredSchedule, filteredExpenses, balances, settlements, showSettlement, showStats, statsFilter, statsTotal,
+                    filteredSchedule, filteredExpenses, balances, settlements, showSettlement, showStats, statsFilter, statsTotal, statsExpenses,
                     showTripModal, showExpModal, isEditing, isEditingExp, tempTrip, tempExp,
                     osmResults, debouncedSearch, selectOSM,
                     openQuickAdd, openEditModal, saveTrip, deleteItem, openEditExpense, saveExpense, deleteExpense,
