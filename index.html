@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程 (V9 SplitFix)</title>
+    <title>北歐旅程 (V10 Final)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,7 +21,6 @@
         .sortable-ghost { opacity: 0.2; background: #bfdbfe; border: 2px dashed #3b82f6; }
         .sortable-drag { opacity: 0.9; transform: scale(1.02); cursor: grabbing; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-        /* 統計切換動畫 - 允許內容撐開 */
         .slide-enter-active, .slide-leave-active { transition: all 0.3s ease; max-height: 500px; opacity: 1; overflow: hidden; }
         .slide-enter-from, .slide-leave-to { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
     </style>
@@ -112,10 +111,8 @@
                  <div class="bg-slate-900 text-white p-6 rounded-[2rem] shadow-xl overflow-hidden transition-all duration-300">
                     
                     <div class="mb-2">
-                        <p class="text-[10px] opacity-60 uppercase tracking-widest mb-2 font-bold">結算報告 (應付帳款)</p>
-                        
+                        <p class="text-[10px] opacity-60 uppercase tracking-widest mb-2 font-bold">結算報告 (全體應付帳款)</p>
                         <div v-if="settlements.length === 0" class="text-center text-xs opacity-50 py-2">目前帳目平衡，無須轉帳</div>
-                        
                         <div class="grid grid-cols-2 gap-2">
                             <div v-for="s in settlements" class="bg-white/10 px-2 py-2 rounded-lg flex flex-col items-center justify-center text-center">
                                 <span class="text-[10px] font-bold text-gray-300 mb-1">
@@ -129,26 +126,20 @@
                     <div @click="showStats = !showStats" class="border-t border-white/10 pt-3 mt-4 flex justify-between items-center cursor-pointer hover:bg-white/5 -mx-6 px-6 py-2 transition-colors">
                         <div class="flex items-center gap-2">
                             <i class="fas fa-chart-pie text-xs opacity-70"></i>
-                            <span class="text-xs font-bold">查看總支出統計與明細</span>
+                            <span class="text-xs font-bold">查看 {{ getGroupName(currentGroup) }} 總支出與明細</span>
                         </div>
                         <i class="fas text-xs opacity-50 transition-transform duration-300" :class="showStats ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                     </div>
 
                     <transition name="slide">
                         <div v-if="showStats" class="pt-4 border-t border-white/5">
-                            <div class="flex bg-white/10 p-1 rounded-lg text-[10px] font-bold mb-4">
-                                <button @click.stop="statsFilter = 'all'" :class="statsFilter === 'all' ? 'bg-white text-slate-900 shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">全體</button>
-                                <button @click.stop="statsFilter = 'holland'" :class="statsFilter === 'holland' ? 'bg-blue-500 text-white shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">荷蘭</button>
-                                <button @click.stop="statsFilter = 'baltic'" :class="statsFilter === 'baltic' ? 'bg-orange-500 text-white shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">三小國</button>
-                            </div>
-                            
                             <div class="text-center mb-4">
-                                <p class="text-[10px] opacity-60 uppercase">累積總支出</p>
+                                <p class="text-[10px] opacity-60 uppercase">{{ getGroupName(currentGroup) }} 累積總支出</p>
                                 <p class="text-3xl font-black mt-1 text-yellow-400">NT$ {{ Math.round(statsTotal).toLocaleString() }}</p>
                             </div>
 
                             <div class="max-h-48 overflow-y-auto hide-scrollbar space-y-2 pr-1">
-                                <p class="text-[10px] opacity-40 uppercase font-bold sticky top-0 bg-slate-900 pb-1">詳細列表</p>
+                                <p class="text-[10px] opacity-40 uppercase font-bold sticky top-0 bg-slate-900 pb-1">歷史明細</p>
                                 <div v-for="item in statsExpenses" class="flex justify-between items-center bg-white/5 p-2 rounded text-xs">
                                     <div class="flex flex-col text-left">
                                         <span class="font-bold text-gray-200">{{ item.desc }}</span>
@@ -160,7 +151,7 @@
                                         </span>
                                     </div>
                                 </div>
-                                <div v-if="statsExpenses.length === 0" class="text-center text-[10px] opacity-30 py-2">無資料</div>
+                                <div v-if="statsExpenses.length === 0" class="text-center text-[10px] opacity-30 py-2">該組別無支出紀錄</div>
                             </div>
                         </div>
                     </transition>
@@ -176,7 +167,7 @@
                 </div>
 
                 <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
-                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">選擇日期查看當日支出 ({{formatDate(selectedDate)}})</h3>
+                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">{{ getGroupName(currentGroup) }} 支出日曆 ({{formatDate(selectedDate)}})</h3>
                     <div class="calendar-grid mb-1">
                         <div v-for="d in ['日','一','二','三','四','五','六']" class="text-center text-[10px] text-slate-300 font-bold">{{d}}</div>
                     </div>
@@ -190,6 +181,7 @@
                     </div>
                 </div>
 
+                <div v-if="filteredExpenses.length === 0" class="text-center text-sm text-slate-400 py-4 font-bold">該組別當日無支出</div>
                 <div v-for="exp in filteredExpenses" :key="exp.id" @click="openEditExpense(exp)" class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-slate-50 active:bg-slate-50">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-600">{{ exp.payer[0] }}</div>
@@ -259,6 +251,11 @@
                     <button @click="showExpModal = false" class="text-slate-300 text-2xl"><i class="fas fa-times-circle"></i></button>
                 </div>
                 <div class="space-y-5">
+                    <div class="bg-slate-50 p-3 rounded-xl flex items-center gap-3">
+                         <label class="text-xs font-bold text-slate-400">日期</label>
+                         <input type="date" v-model="tempExp.date" class="bg-transparent outline-none font-bold text-slate-800 flex-1">
+                    </div>
+
                     <input v-model="tempExp.desc" placeholder="消費項目" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold text-lg">
                     <div class="flex gap-3">
                         <div class="flex-1 relative"><label class="text-[10px] font-bold text-slate-400 absolute top-2 left-3">金額</label><input v-model.number="tempExp.amount" type="number" class="w-full pt-6 pb-2 px-3 bg-slate-50 rounded-xl outline-none font-mono font-black text-xl"></div>
@@ -312,9 +309,8 @@
                 const activeTab = ref('schedule');
                 const currentGroup = ref('all');
                 const selectedDate = ref('2026-03-19');
-                const showSettlement = ref(true); // 黑色卡片是否顯示詳細 (目前用於CSS transition)
-                const showStats = ref(false); // 是否顯示統計區塊
-                const statsFilter = ref('all'); // 統計過濾器
+                const showSettlement = ref(true); 
+                const showStats = ref(false); 
                 const dbConnected = ref(false);
                 const loading = ref(true);
                 const errorMessage = ref('');
@@ -402,28 +398,41 @@
 
                 const deleteItem = async () => { await deleteDoc(doc(db, "schedule", tempTrip.value.id)); showTripModal.value = false; };
                 const copyItem = async () => { const newItem = { ...tempTrip.value, date: copyTargetDate.value }; delete newItem.id; await addDoc(collection(db, "schedule"), newItem); showCopyMenu.value = false; showTripModal.value = false; alert('已複製到雲端'); };
+                
+                // 修正：保存時不再強制覆蓋為 selectedDate，而是尊重使用者選擇的日期
                 const saveExpense = async () => {
-                    tempExp.value.date = selectedDate.value;
                     if (isEditingExp.value) { const expRef = doc(db, "expenses", tempExp.value.id); const { id, ...data } = tempExp.value; await updateDoc(expRef, data); }
                     else { await addDoc(collection(db, "expenses"), tempExp.value); }
                     showExpModal.value = false;
                 };
                 const deleteExpense = async () => { await deleteDoc(doc(db, "expenses", tempExp.value.id)); showExpModal.value = false; };
 
+                // --- 邏輯修正：filteredExpenses (列表) ---
+                const filteredExpenses = computed(() => {
+                    return expenses.value.filter(e => {
+                        // 1. 日期篩選
+                        if (e.date !== selectedDate.value) return false;
+                        // 2. 組別篩選 (邏輯：如果該支出「有」包含該組成員，就顯示)
+                        if (currentGroup.value === 'all') return true;
+                        const targetMembers = groupMembers[currentGroup.value];
+                        // 檢查分攤對象是否有交集
+                        return e.splitWith.some(m => targetMembers.includes(m));
+                    });
+                });
+
+                // --- 邏輯修正：filteredSchedule (行程) ---
                 const filteredSchedule = computed(() => {
                     let list = schedule.value.filter(i => i.date === selectedDate.value && (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all'));
                     return list.sort((a, b) => a.time.localeCompare(b.time));
                 });
                 
-                const filteredExpenses = computed(() => expenses.value.filter(e => e.date === selectedDate.value));
-                
-                // 統計計算 (過濾出該組成員參與的帳目)
+                // --- 邏輯修正：statsExpenses (總支出明細) ---
                 const statsExpenses = computed(() => {
                     return expenses.value.filter(exp => {
-                         if (statsFilter.value === 'all') return true;
-                         const targetMembers = groupMembers[statsFilter.value];
+                         if (currentGroup.value === 'all') return true;
+                         const targetMembers = groupMembers[currentGroup.value];
                          return exp.splitWith.some(m => targetMembers.includes(m));
-                    }).sort((a, b) => b.date.localeCompare(a.date)); // 日期新到舊
+                    }).sort((a, b) => b.date.localeCompare(a.date));
                 });
 
                 const statsTotal = computed(() => {
@@ -432,6 +441,17 @@
                         return sum + amt;
                     }, 0);
                 });
+
+                // --- 邏輯修正：月曆小橘點 ---
+                // 檢查該日期是否有「符合當前組別」的支出
+                const hasExpense = (d) => {
+                    return expenses.value.some(e => {
+                        if (e.date !== d) return false;
+                        if (currentGroup.value === 'all') return true;
+                        const targetMembers = groupMembers[currentGroup.value];
+                        return e.splitWith.some(m => targetMembers.includes(m));
+                    });
+                };
 
                 const calendarDays = computed(() => {
                     const curr = new Date(selectedDate.value);
@@ -448,7 +468,8 @@
                     }
                     return days;
                 });
-                const hasExpense = (d) => expenses.value.some(e => e.date === d);
+                
+                // 這些維持全域計算 (不隨組別變動)
                 const balances = computed(() => { let b = {}; members.forEach(m => b[m] = 0); expenses.value.forEach(e => { const val = e.currency === 'EUR' ? e.amount * (e.rate || 37) : e.amount; b[e.payer] += val; const share = val / e.splitWith.length; e.splitWith.forEach(m => b[m] -= share); }); return b; });
                 const settlements = computed(() => { const b = { ...balances.value }; const debtors = [], creditors = []; for (let m in b) { if (b[m] < -1) debtors.push({ name: m, amount: Math.abs(b[m]) }); else if (b[m] > 1) creditors.push({ name: m, amount: b[m] }); } const res = []; let i = 0, j = 0; while (i < debtors.length && j < creditors.length) { const amt = Math.min(debtors[i].amount, creditors[j].amount); res.push({ from: debtors[i].name, to: creditors[j].name, amount: amt }); debtors[i].amount -= amt; creditors[j].amount -= amt; if (debtors[i].amount < 1) i++; if (creditors[j].amount < 1) j++; } return res; });
 
@@ -461,9 +482,14 @@
                 const selectOSM = (res) => { tempTrip.value.location = res.name; tempTrip.value.lat = res.lat; tempTrip.value.lon = res.lon; osmResults.value = []; };
                 const formatDate = (d) => { const p = d.split('-'); return `${p[1]}/${p[2]}`; };
                 const getGroupName = (g) => groupMap[g];
-                const openQuickAdd = () => { if (activeTab.value === 'split') { isEditingExp.value = false; tempExp.value = { desc: '', amount: null, currency: 'TWD', payer: '媽媽', splitWith: [...members], rate: 37 }; showExpModal.value = true; } else { isEditing.value = false; tempTrip.value = { date: selectedDate.value, time: '09:00', stay: 60, transport: 30, location: '', group: currentGroup.value === 'all' ? 'all' : currentGroup.value }; showTripModal.value = true; } };
+                
+                // 新增支出時，預設日期為 selectedDate
+                const openQuickAdd = () => { if (activeTab.value === 'split') { isEditingExp.value = false; tempExp.value = { date: selectedDate.value, desc: '', amount: null, currency: 'TWD', payer: '媽媽', splitWith: [...members], rate: 37 }; showExpModal.value = true; } else { isEditing.value = false; tempTrip.value = { date: selectedDate.value, time: '09:00', stay: 60, transport: 30, location: '', group: currentGroup.value === 'all' ? 'all' : currentGroup.value }; showTripModal.value = true; } };
                 const openEditModal = (item) => { isEditing.value = true; tempTrip.value = { ...item }; copyTargetDate.value = item.date; showCopyMenu.value = false; showTripModal.value = true; };
+                
+                // 編輯支出時，讀取原有日期
                 const openEditExpense = (e) => { isEditingExp.value = true; tempExp.value = { ...e }; showExpModal.value = true; };
+                
                 const setSplitGroup = (group) => { tempExp.value.splitWith = [...groupMembers[group]]; };
                 const toggleAllSplit = () => { tempExp.value.splitWith = tempExp.value.splitWith.length === members.length ? [] : [...members]; };
                 const openGoogleMaps = () => { const list = filteredSchedule.value; const idx = list.findIndex(s => s.id === tempTrip.value.id); let origin = idx > 0 ? list[idx - 1].location : (list.length > 0 ? list[list.length - 1].location : ""); if (origin && tempTrip.value.location) window.open(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(tempTrip.value.location)}&travelmode=driving`, '_blank'); };
@@ -489,7 +515,7 @@
 
                 return {
                     activeTab, currentGroup, selectedDate, dateRange, members, getGroupName, dbConnected, loading, errorMessage,
-                    filteredSchedule, filteredExpenses, balances, settlements, showSettlement, showStats, statsFilter, statsTotal, statsExpenses,
+                    filteredSchedule, filteredExpenses, balances, settlements, showSettlement, showStats, statsTotal, statsExpenses,
                     showTripModal, showExpModal, isEditing, isEditingExp, tempTrip, tempExp,
                     osmResults, debouncedSearch, selectOSM,
                     openQuickAdd, openEditModal, saveTrip, deleteItem, openEditExpense, saveExpense, deleteExpense,
