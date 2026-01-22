@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程 (雲端同步版)</title>
+    <title>北歐旅程 (診斷版)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
     <style>
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -27,9 +26,21 @@
 <body class="bg-slate-50 font-sans text-slate-900 overflow-hidden">
     <div id="app" v-cloak class="h-screen flex flex-col">
         
+        <div v-if="errorMessage" class="bg-red-500 text-white p-3 text-xs font-bold text-center z-50">
+            <i class="fas fa-exclamation-triangle mr-1"></i> 連線錯誤：{{ errorMessage }}
+            <div class="mt-1 font-normal opacity-80">請檢查 Firebase Console 的 Rules 設定</div>
+        </div>
+
         <header class="bg-white pt-4 px-4 border-b shrink-0 z-20">
             <div class="flex justify-between items-center mb-3">
-                <h1 class="text-xl font-black italic tracking-tighter text-slate-800 uppercase">Nordic 2026 <span class="text-[10px] not-italic bg-green-100 text-green-600 px-2 py-1 rounded ml-2" v-if="dbConnected">雲端連線中</span></h1>
+                <h1 class="text-xl font-black italic tracking-tighter text-slate-800 uppercase">Nordic 2026 
+                    <span class="text-[10px] not-italic bg-green-100 text-green-600 px-2 py-1 rounded ml-2" v-if="dbConnected">
+                        <i class="fas fa-check-circle"></i> 已連線
+                    </span>
+                    <span class="text-[10px] not-italic bg-gray-100 text-gray-500 px-2 py-1 rounded ml-2" v-else-if="!errorMessage">
+                        <i class="fas fa-circle-notch fa-spin"></i> 連線中...
+                    </span>
+                </h1>
                 <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
                     <button @click="currentGroup = 'all'" :class="currentGroup === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-400'" class="px-3 py-1.5 rounded-lg transition-all">全體</button>
                     <button @click="currentGroup = 'holland'" :class="currentGroup === 'holland' ? 'bg-blue-500 text-white' : 'text-slate-400'" class="px-3 py-1.5 rounded-lg transition-all">荷蘭</button>
@@ -48,12 +59,15 @@
             <section v-if="activeTab === 'schedule'" class="p-4">
                 <div class="flex justify-between items-center mb-4 bg-blue-50 p-3 rounded-xl border border-blue-100">
                     <h2 class="text-xs font-bold text-blue-600"><i class="fas fa-magic mr-1"></i>移動行程將同步至雲端</h2>
-                    <div class="text-[10px] text-blue-400">長按卡片排序，時間自動重算</div>
+                    <div class="text-[10px] text-blue-400">長按卡片排序</div>
                 </div>
 
-                <div v-if="loading" class="text-center py-10 text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>讀取雲端資料中...</div>
-
+                <div v-if="!dbConnected && !errorMessage" class="text-center py-10 text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>正在連接資料庫...</div>
+                
                 <div id="schedule-list" class="space-y-0 pb-10" v-else>
+                    <div v-if="filteredSchedule.length === 0" class="text-center py-10 text-slate-300 font-bold border-2 border-dashed border-slate-200 rounded-2xl">
+                        這天還沒有行程<br>點下方按鈕新增
+                    </div>
                     <div v-for="(item, index) in filteredSchedule" :key="item.id" :data-id="item.id"
                          class="relative pl-2 mb-2 schedule-item select-none touch-manipulation" 
                          :class="{'timeline-line': index !== filteredSchedule.length - 1, 'timeline-last': index === filteredSchedule.length - 1}">
@@ -101,10 +115,7 @@
             <section v-if="activeTab === 'split'" class="p-4 space-y-4 pb-32">
                  <div class="bg-slate-900 text-white p-6 rounded-[2rem] shadow-xl">
                     <div @click="showSettlement = !showSettlement" class="flex justify-between items-center cursor-pointer">
-                        <div>
-                            <p class="text-[10px] opacity-60 uppercase tracking-widest">結算報告 (TWD)</p>
-                            <p class="text-3xl font-black">應付帳款</p>
-                        </div>
+                        <div><p class="text-[10px] opacity-60 uppercase tracking-widest">結算報告 (TWD)</p><p class="text-3xl font-black">應付帳款</p></div>
                         <i class="fas" :class="showSettlement ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                     </div>
                     <div v-show="showSettlement" class="mt-6 space-y-3 pt-6 border-t border-white/10">
@@ -143,10 +154,7 @@
                 <div v-for="exp in filteredExpenses" :key="exp.id" @click="openEditExpense(exp)" class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-slate-50 active:bg-slate-50">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-600">{{ exp.payer[0] }}</div>
-                        <div>
-                            <p class="font-bold text-sm text-slate-800">{{ exp.desc }}</p>
-                            <p class="text-[10px] text-slate-400">{{ formatDate(exp.date) }} · {{ exp.payer }} 付</p>
-                        </div>
+                        <div><p class="font-bold text-sm text-slate-800">{{ exp.desc }}</p><p class="text-[10px] text-slate-400">{{ formatDate(exp.date) }} · {{ exp.payer }} 付</p></div>
                     </div>
                     <div class="text-right font-mono">
                         <p class="font-black text-slate-800 text-sm">{{ exp.currency === 'EUR' ? '€' : 'NT$' }} {{ exp.amount }}</p>
@@ -236,12 +244,13 @@
     </div>
 
     <script type="module">
+        // Import Functions from CDN
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
 
         // ---------------------------------------------------------
-        // 你的 Firebase Config 已整合
+        // Config Integrated!
         // ---------------------------------------------------------
         const firebaseConfig = {
           apiKey: "AIzaSyC_trr15i7caUUFXdQeT54rjJj2CbPljlE",
@@ -254,6 +263,7 @@
         };
         // ---------------------------------------------------------
 
+        // Init Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
@@ -265,6 +275,7 @@
                 const showSettlement = ref(true);
                 const dbConnected = ref(false);
                 const loading = ref(true);
+                const errorMessage = ref('');
 
                 const members = ['媽媽', '佩琪', '恩琪', '一休', '錦盆'];
                 const groupMap = { holland: '荷蘭組', baltic: '三小國', all: '全體' };
@@ -278,25 +289,34 @@
                 const schedule = ref([]);
                 const expenses = ref([]);
 
-                // 1. 初始化監聽 (Real-time Sync)
+                // 1. Init Data Listeners (with Error Handling)
                 onMounted(() => {
-                    // Listen to Schedule
                     const qSchedule = collection(db, "schedule");
-                    onSnapshot(qSchedule, (snapshot) => {
-                        schedule.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        loading.value = false;
-                        dbConnected.value = true;
-                        if (activeTab.value === 'schedule') nextTick(initSortable);
-                    });
+                    onSnapshot(qSchedule, 
+                        (snapshot) => {
+                            schedule.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            loading.value = false;
+                            dbConnected.value = true;
+                            errorMessage.value = '';
+                            if (activeTab.value === 'schedule') nextTick(initSortable);
+                        }, 
+                        (error) => {
+                            console.error("Firestore Error:", error);
+                            errorMessage.value = error.message;
+                            loading.value = false;
+                        }
+                    );
 
-                    // Listen to Expenses
                     const qExpenses = collection(db, "expenses");
-                    onSnapshot(qExpenses, (snapshot) => {
-                        expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    });
+                    onSnapshot(qExpenses, 
+                        (snapshot) => {
+                            expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        },
+                        (error) => { console.error("Expense Error:", error); }
+                    );
                 });
 
-                // Sortable Logic (Updated for Firebase)
+                // Sortable
                 let sortableInstance = null;
                 const initSortable = () => {
                     const el = document.getElementById('schedule-list');
@@ -333,7 +353,7 @@
                     });
                 };
 
-                // CRUD Functions
+                // CRUD
                 const saveTrip = async () => {
                     if (isEditing.value) {
                         const tripRef = doc(db, "schedule", tempTrip.value.id);
@@ -375,6 +395,7 @@
                     showExpModal.value = false;
                 };
 
+                // Logic
                 const filteredSchedule = computed(() => {
                     let list = schedule.value.filter(i => i.date === selectedDate.value && (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all'));
                     return list.sort((a, b) => a.time.localeCompare(b.time));
@@ -435,7 +456,7 @@
                 watch(selectedDate, () => { if (activeTab.value === 'schedule') nextTick(initSortable); });
 
                 return {
-                    activeTab, currentGroup, selectedDate, dateRange, members, getGroupName, dbConnected, loading,
+                    activeTab, currentGroup, selectedDate, dateRange, members, getGroupName, dbConnected, loading, errorMessage,
                     filteredSchedule, filteredExpenses, balances, settlements, showSettlement,
                     showTripModal, showExpModal, isEditing, isEditingExp, tempTrip, tempExp,
                     osmResults, debouncedSearch, selectOSM,
