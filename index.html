@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程 (雲端同步版)</title>
+    <title>北歐旅程 (雲端同步最終版)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -130,7 +130,7 @@
                 </div>
 
                 <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
-                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">選擇日期 ({{formatDate(selectedDate)}})</h3>
+                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">選擇日期查看支出 ({{formatDate(selectedDate)}})</h3>
                     <div class="calendar-grid mb-1">
                         <div v-for="d in ['日','一','二','三','四','五','六']" class="text-center text-[10px] text-slate-300 font-bold">{{d}}</div>
                     </div>
@@ -244,21 +244,24 @@
     </div>
 
     <script type="module">
-        // Import Functions from CDN
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
 
         // ---------------------------------------------------------
-        // 請填入妳的 Config
+        // 已自動為妳填入資訊！
         // ---------------------------------------------------------
         const firebaseConfig = {
-           // 在這裡貼上妳的 config ...
-           // apiKey: "...",
+          apiKey: "AIzaSyC_trr15i7caUUFXdQeT54rjJj2CbPljlE",
+          authDomain: "europetrip2026-d36f1.firebaseapp.com",
+          databaseURL: "https://europetrip2026-d36f1-default-rtdb.firebaseio.com",
+          projectId: "europetrip2026-d36f1",
+          storageBucket: "europetrip2026-d36f1.firebasestorage.app",
+          messagingSenderId: "368850353659",
+          appId: "1:368850353659:web:8cc22ae3fcf13d11051f5e"
         };
         // ---------------------------------------------------------
 
-        // Init Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
@@ -274,7 +277,7 @@
 
                 const members = ['媽媽', '佩琪', '恩琪', '一休', '錦盆'];
                 const groupMap = { holland: '荷蘭組', baltic: '三小國', all: '全體' };
-                // 增加組別定義，用於快速選取
+                // 定義組別對應名單
                 const groupMembers = {
                     holland: ['媽媽', '佩琪', '錦盆'],
                     baltic: ['恩琪', '一休'],
@@ -291,7 +294,6 @@
                 const schedule = ref([]);
                 const expenses = ref([]);
 
-                // 1. Init Data Listeners
                 onMounted(() => {
                     const qSchedule = collection(db, "schedule");
                     onSnapshot(qSchedule, 
@@ -303,22 +305,17 @@
                             if (activeTab.value === 'schedule') nextTick(initSortable);
                         }, 
                         (error) => {
-                            console.error("Firestore Error:", error);
                             errorMessage.value = error.message;
                             loading.value = false;
                         }
                     );
 
                     const qExpenses = collection(db, "expenses");
-                    onSnapshot(qExpenses, 
-                        (snapshot) => {
-                            expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        },
-                        (error) => { console.error("Expense Error:", error); }
-                    );
+                    onSnapshot(qExpenses, (snapshot) => {
+                        expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    });
                 });
 
-                // Sortable
                 let sortableInstance = null;
                 const initSortable = () => {
                     const el = document.getElementById('schedule-list');
@@ -329,14 +326,11 @@
                         onEnd: async (evt) => {
                             const { oldIndex, newIndex } = evt;
                             if (oldIndex === newIndex) return;
-
                             const visibleItems = [...filteredSchedule.value];
                             const movedItem = visibleItems.splice(oldIndex, 1)[0];
                             visibleItems.splice(newIndex, 0, movedItem);
-
                             let currentTime = new Date(`2000-01-01T${visibleItems[0].time}`);
                             const batch = writeBatch(db);
-
                             visibleItems.forEach((item, index) => {
                                 if (index > 0) {
                                     const prevItem = visibleItems[index - 1];
@@ -349,60 +343,34 @@
                                 const ref = doc(db, "schedule", item.id);
                                 batch.update(ref, { time: item.time }); 
                             });
-
                             await batch.commit();
                         }
                     });
                 };
 
-                // CRUD
                 const saveTrip = async () => {
                     if (isEditing.value) {
                         const tripRef = doc(db, "schedule", tempTrip.value.id);
                         const { id, ...data } = tempTrip.value; 
                         await updateDoc(tripRef, data);
-                    } else {
-                        await addDoc(collection(db, "schedule"), tempTrip.value);
-                    }
+                    } else { await addDoc(collection(db, "schedule"), tempTrip.value); }
                     showTripModal.value = false;
                 };
 
-                const deleteItem = async () => {
-                    await deleteDoc(doc(db, "schedule", tempTrip.value.id));
-                    showTripModal.value = false;
-                };
-
-                const copyItem = async () => {
-                    const newItem = { ...tempTrip.value, date: copyTargetDate.value };
-                    delete newItem.id; 
-                    await addDoc(collection(db, "schedule"), newItem);
-                    showCopyMenu.value = false; showTripModal.value = false; 
-                    alert('已複製到雲端');
-                };
-
+                const deleteItem = async () => { await deleteDoc(doc(db, "schedule", tempTrip.value.id)); showTripModal.value = false; };
+                const copyItem = async () => { const newItem = { ...tempTrip.value, date: copyTargetDate.value }; delete newItem.id; await addDoc(collection(db, "schedule"), newItem); showCopyMenu.value = false; showTripModal.value = false; alert('已複製到雲端'); };
                 const saveExpense = async () => {
                     tempExp.value.date = selectedDate.value;
-                    if (isEditingExp.value) {
-                         const expRef = doc(db, "expenses", tempExp.value.id);
-                         const { id, ...data } = tempExp.value;
-                         await updateDoc(expRef, data);
-                    } else {
-                         await addDoc(collection(db, "expenses"), tempExp.value);
-                    }
+                    if (isEditingExp.value) { const expRef = doc(db, "expenses", tempExp.value.id); const { id, ...data } = tempExp.value; await updateDoc(expRef, data); }
+                    else { await addDoc(collection(db, "expenses"), tempExp.value); }
                     showExpModal.value = false;
                 };
+                const deleteExpense = async () => { await deleteDoc(doc(db, "expenses", tempExp.value.id)); showExpModal.value = false; };
 
-                const deleteExpense = async () => {
-                    await deleteDoc(doc(db, "expenses", tempExp.value.id));
-                    showExpModal.value = false;
-                };
-
-                // Logic
                 const filteredSchedule = computed(() => {
                     let list = schedule.value.filter(i => i.date === selectedDate.value && (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all'));
                     return list.sort((a, b) => a.time.localeCompare(b.time));
                 });
-                
                 const filteredExpenses = computed(() => expenses.value.filter(e => e.date === selectedDate.value));
                 const calendarDays = computed(() => {
                     const curr = new Date(selectedDate.value);
@@ -420,7 +388,6 @@
                     return days;
                 });
                 const hasExpense = (d) => expenses.value.some(e => e.date === d);
-                
                 const balances = computed(() => { let b = {}; members.forEach(m => b[m] = 0); expenses.value.forEach(e => { const val = e.currency === 'EUR' ? e.amount * (e.rate || 37) : e.amount; b[e.payer] += val; const share = val / e.splitWith.length; e.splitWith.forEach(m => b[m] -= share); }); return b; });
                 const settlements = computed(() => { const b = { ...balances.value }; const debtors = [], creditors = []; for (let m in b) { if (b[m] < -1) debtors.push({ name: m, amount: Math.abs(b[m]) }); else if (b[m] > 1) creditors.push({ name: m, amount: b[m] }); } const res = []; let i = 0, j = 0; while (i < debtors.length && j < creditors.length) { const amt = Math.min(debtors[i].amount, creditors[j].amount); res.push({ from: debtors[i].name, to: creditors[j].name, amount: amt }); debtors[i].amount -= amt; creditors[j].amount -= amt; if (debtors[i].amount < 1) i++; if (creditors[j].amount < 1) j++; } return res; });
 
@@ -436,7 +403,7 @@
                 const openQuickAdd = () => { if (activeTab.value === 'split') { isEditingExp.value = false; tempExp.value = { desc: '', amount: null, currency: 'TWD', payer: '媽媽', splitWith: [...members], rate: 37 }; showExpModal.value = true; } else { isEditing.value = false; tempTrip.value = { date: selectedDate.value, time: '09:00', stay: 60, transport: 30, location: '', group: currentGroup.value === 'all' ? 'all' : currentGroup.value }; showTripModal.value = true; } };
                 const openEditModal = (item) => { isEditing.value = true; tempTrip.value = { ...item }; copyTargetDate.value = item.date; showCopyMenu.value = false; showTripModal.value = true; };
                 const openEditExpense = (e) => { isEditingExp.value = true; tempExp.value = { ...e }; showExpModal.value = true; };
-                // 新增：快速設定分攤組別
+                // 修改：實作快速選取
                 const setSplitGroup = (group) => { tempExp.value.splitWith = [...groupMembers[group]]; };
                 const toggleAllSplit = () => { tempExp.value.splitWith = tempExp.value.splitWith.length === members.length ? [] : [...members]; };
                 const openGoogleMaps = () => { const list = filteredSchedule.value; const idx = list.findIndex(s => s.id === tempTrip.value.id); let origin = idx > 0 ? list[idx - 1].location : (list.length > 0 ? list[list.length - 1].location : ""); if (origin && tempTrip.value.location) window.open(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(tempTrip.value.location)}&travelmode=driving`, '_blank'); };
