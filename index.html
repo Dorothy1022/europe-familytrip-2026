@@ -3,25 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程小幫手 Final Fix</title>
+    <title>北歐旅程 (雲端同步版)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
     <style>
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 20px); }
         .tab-active { color: #3b82f6; border-top: 3px solid #3b82f6; }
         [v-cloak] { display: none; }
-        .timeline-line::before {
-            content: ''; position: absolute; left: 24px; top: 44px; bottom: -10px; width: 2px; background: #e2e8f0; z-index: 0;
-        }
+        .timeline-line::before { content: ''; position: absolute; left: 24px; top: 44px; bottom: -10px; width: 2px; background: #e2e8f0; z-index: 0; }
         .timeline-last::before { display: none; }
         .sortable-ghost { opacity: 0.2; background: #bfdbfe; border: 2px dashed #3b82f6; }
-        .sortable-drag { opacity: 0.9; transform: scale(1.02); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); cursor: grabbing; }
+        .sortable-drag { opacity: 0.9; transform: scale(1.02); cursor: grabbing; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
     </style>
 </head>
@@ -30,21 +29,17 @@
         
         <header class="bg-white pt-4 px-4 border-b shrink-0 z-20">
             <div class="flex justify-between items-center mb-3">
-                <h1 class="text-xl font-black italic tracking-tighter text-slate-800 uppercase">Nordic 2026</h1>
+                <h1 class="text-xl font-black italic tracking-tighter text-slate-800 uppercase">Nordic 2026 <span class="text-[10px] not-italic bg-green-100 text-green-600 px-2 py-1 rounded ml-2" v-if="dbConnected">雲端連線中</span></h1>
                 <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
                     <button @click="currentGroup = 'all'" :class="currentGroup === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-400'" class="px-3 py-1.5 rounded-lg transition-all">全體</button>
                     <button @click="currentGroup = 'holland'" :class="currentGroup === 'holland' ? 'bg-blue-500 text-white' : 'text-slate-400'" class="px-3 py-1.5 rounded-lg transition-all">荷蘭</button>
                     <button @click="currentGroup = 'baltic'" :class="currentGroup === 'baltic' ? 'bg-orange-500 text-white' : 'text-slate-400'" class="px-3 py-1.5 rounded-lg transition-all">三小國</button>
                 </div>
             </div>
-
             <div v-if="activeTab !== 'split'" class="flex overflow-x-auto hide-scrollbar space-x-6 pb-2">
-                <div v-for="date in dateRange" :key="date" 
-                     @click="selectedDate = date"
+                <div v-for="date in dateRange" :key="date" @click="selectedDate = date"
                      :class="selectedDate === date ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'text-slate-400'"
-                     class="whitespace-nowrap px-1 py-1 text-sm cursor-pointer transition-all">
-                    {{ formatDate(date) }}
-                </div>
+                     class="whitespace-nowrap px-1 py-1 text-sm cursor-pointer transition-all">{{ formatDate(date) }}</div>
             </div>
         </header>
 
@@ -52,23 +47,23 @@
             
             <section v-if="activeTab === 'schedule'" class="p-4">
                 <div class="flex justify-between items-center mb-4 bg-blue-50 p-3 rounded-xl border border-blue-100">
-                    <h2 class="text-xs font-bold text-blue-600"><i class="fas fa-magic mr-1"></i>移動行程將自動重算時間</h2>
-                    <div class="text-[10px] text-blue-400">目前針對：{{ getGroupName(currentGroup) }} 計算</div>
+                    <h2 class="text-xs font-bold text-blue-600"><i class="fas fa-magic mr-1"></i>移動行程將同步至雲端</h2>
+                    <div class="text-[10px] text-blue-400">長按卡片排序，時間自動重算</div>
                 </div>
 
-                <div id="schedule-list" class="space-y-0 pb-10">
+                <div v-if="loading" class="text-center py-10 text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>讀取雲端資料中...</div>
+
+                <div id="schedule-list" class="space-y-0 pb-10" v-else>
                     <div v-for="(item, index) in filteredSchedule" :key="item.id" :data-id="item.id"
                          class="relative pl-2 mb-2 schedule-item select-none touch-manipulation" 
                          :class="{'timeline-line': index !== filteredSchedule.length - 1, 'timeline-last': index === filteredSchedule.length - 1}">
                         
                         <div @click="openEditModal(item)" class="bg-white p-4 rounded-2xl shadow-sm border-l-4 relative z-10 flex gap-3 cursor-pointer active:scale-95 transition-transform"
                              :class="item.group === 'holland' ? 'border-blue-500' : (item.group === 'baltic' ? 'border-orange-500' : 'border-slate-800')">
-                            
                             <div class="flex flex-col items-center justify-center min-w-[50px] border-r border-slate-100 pr-3 pointer-events-none">
                                 <span class="text-lg font-black leading-none tracking-tight">{{ item.time }}</span>
                                 <span class="text-[10px] text-slate-400 mt-1 font-bold">停{{ item.stay }}m</span>
                             </div>
-
                             <div class="flex-1 overflow-hidden pointer-events-none">
                                 <div class="font-bold text-slate-800 truncate text-base">{{ item.location }}</div>
                                 <div class="flex items-center gap-2 mt-1">
@@ -76,18 +71,14 @@
                                     <span v-if="item.note" class="text-[10px] text-slate-400 truncate max-w-[100px]"><i class="far fa-sticky-note mr-1"></i>{{ item.note }}</span>
                                 </div>
                             </div>
-                            
                             <div class="absolute right-2 top-2 text-slate-200 pointer-events-none"><i class="fas fa-grip-lines"></i></div>
                         </div>
 
                         <div v-if="index !== filteredSchedule.length - 1" class="ml-14 pl-2 py-3 flex items-center gap-2 text-xs text-slate-400 relative z-0 pointer-events-none">
-                            <div class="bg-slate-100 px-2 py-1 rounded-full text-[10px] font-bold">
-                                <i class="fas fa-car-side mr-1"></i>交通約 {{ item.transport }} 分
-                            </div>
+                            <div class="bg-slate-100 px-2 py-1 rounded-full text-[10px] font-bold"><i class="fas fa-car-side mr-1"></i>交通約 {{ item.transport }} 分</div>
                         </div>
                     </div>
                 </div>
-
                 <button @click="openQuickAdd" class="w-full py-4 mt-2 bg-white border-2 border-dashed border-slate-300 rounded-2xl text-slate-400 font-bold hover:bg-slate-50 transition-colors shadow-sm">+ 新增行程點</button>
             </section>
 
@@ -140,13 +131,9 @@
                         <div v-for="d in ['日','一','二','三','四','五','六']" class="text-center text-[10px] text-slate-300 font-bold">{{d}}</div>
                     </div>
                     <div class="calendar-grid">
-                        <div v-for="d in calendarDays" :key="d.date" 
-                             @click="selectedDate = d.fullDate"
+                        <div v-for="d in calendarDays" :key="d.date" @click="selectedDate = d.fullDate"
                              class="aspect-square flex flex-col items-center justify-center rounded-xl text-xs relative cursor-pointer transition-colors"
-                             :class="[
-                                selectedDate === d.fullDate ? 'bg-slate-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50',
-                                d.isCurrentMonth ? '' : 'opacity-20 pointer-events-none'
-                             ]">
+                             :class="[selectedDate === d.fullDate ? 'bg-slate-900 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50', d.isCurrentMonth ? '' : 'opacity-20 pointer-events-none']">
                             <span class="font-bold">{{ d.date }}</span>
                             <div v-if="hasExpense(d.fullDate)" class="w-1 h-1 rounded-full mt-0.5" :class="selectedDate === d.fullDate ? 'bg-orange-400' : 'bg-orange-500'"></div>
                         </div>
@@ -170,18 +157,10 @@
         </main>
 
         <nav class="bg-white/90 backdrop-blur border-t flex justify-around items-center safe-bottom h-20 shrink-0 z-30 absolute bottom-0 w-full">
-            <button @click="activeTab = 'schedule'" :class="activeTab === 'schedule' ? 'tab-active' : 'text-slate-400'" class="flex-1 flex flex-col items-center pt-2 h-full">
-                <i class="fas fa-route text-lg"></i><span class="text-[10px] mt-1 font-bold">行程</span>
-            </button>
-            <div @click="openQuickAdd" class="w-14 h-14 bg-slate-900 text-white rounded-full flex items-center justify-center shadow-lg -mt-8 border-4 border-slate-50 cursor-pointer active:scale-95 transition-transform">
-                <i class="fas fa-plus text-xl"></i>
-            </div>
-            <button @click="activeTab = 'map'" :class="activeTab === 'map' ? 'tab-active' : 'text-slate-400'" class="flex-1 flex flex-col items-center pt-2 h-full">
-                <i class="fas fa-map-marked-alt text-lg"></i><span class="text-[10px] mt-1 font-bold">地圖</span>
-            </button>
-            <button @click="activeTab = 'split'" :class="activeTab === 'split' ? 'tab-active' : 'text-slate-400'" class="flex-1 flex flex-col items-center pt-2 h-full">
-                <i class="fas fa-receipt text-lg"></i><span class="text-[10px] mt-1 font-bold">分帳</span>
-            </button>
+            <button @click="activeTab = 'schedule'" :class="activeTab === 'schedule' ? 'tab-active' : 'text-slate-400'" class="flex-1 flex flex-col items-center pt-2 h-full"><i class="fas fa-route text-lg"></i><span class="text-[10px] mt-1 font-bold">行程</span></button>
+            <div @click="openQuickAdd" class="w-14 h-14 bg-slate-900 text-white rounded-full flex items-center justify-center shadow-lg -mt-8 border-4 border-slate-50 cursor-pointer active:scale-95 transition-transform"><i class="fas fa-plus text-xl"></i></div>
+            <button @click="activeTab = 'map'" :class="activeTab === 'map' ? 'tab-active' : 'text-slate-400'" class="flex-1 flex flex-col items-center pt-2 h-full"><i class="fas fa-map-marked-alt text-lg"></i><span class="text-[10px] mt-1 font-bold">地圖</span></button>
+            <button @click="activeTab = 'split'" :class="activeTab === 'split' ? 'tab-active' : 'text-slate-400'" class="flex-1 flex flex-col items-center pt-2 h-full"><i class="fas fa-receipt text-lg"></i><span class="text-[10px] mt-1 font-bold">分帳</span></button>
         </nav>
 
         <div v-if="showTripModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end">
@@ -189,13 +168,11 @@
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-xl font-black">{{ isEditing ? '編輯行程' : '新增行程' }}</h2>
                     <div class="flex gap-3">
-                        <div class="relative" v-if="isEditing">
+                         <div class="relative" v-if="isEditing">
                              <button @click="showCopyMenu = !showCopyMenu" class="text-blue-500 w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center"><i class="fas fa-copy"></i></button>
                              <div v-if="showCopyMenu" class="absolute right-0 top-10 bg-white shadow-xl border rounded-xl p-3 w-48 z-50">
                                 <p class="text-xs font-bold text-slate-400 mb-2">複製到哪天？</p>
-                                <select v-model="copyTargetDate" class="w-full p-2 bg-slate-50 rounded mb-2 text-sm font-bold">
-                                    <option v-for="d in dateRange" :value="d">{{ formatDate(d) }}</option>
-                                </select>
+                                <select v-model="copyTargetDate" class="w-full p-2 bg-slate-50 rounded mb-2 text-sm font-bold"><option v-for="d in dateRange" :value="d">{{ formatDate(d) }}</option></select>
                                 <button @click="copyItem" class="w-full bg-blue-500 text-white text-xs py-2 rounded font-bold">確認複製</button>
                              </div>
                         </div>
@@ -203,48 +180,25 @@
                         <button @click="showTripModal = false" class="text-slate-300 text-2xl"><i class="fas fa-times-circle"></i></button>
                     </div>
                 </div>
-                
                 <div class="space-y-4">
                     <div class="relative">
                         <label class="text-xs font-bold text-slate-400 ml-1">地點名稱</label>
                         <input v-model="tempTrip.location" @input="debouncedSearch" placeholder="搜尋地點..." class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold text-lg">
                         <div v-if="osmResults.length > 0" class="absolute left-0 right-0 top-20 bg-white shadow-2xl rounded-xl z-[60] max-h-48 overflow-y-auto border border-slate-100">
                             <div v-for="res in osmResults" @click="selectOSM(res)" class="p-3 hover:bg-slate-50 border-b border-slate-100 flex items-center gap-3 cursor-pointer">
-                                <i class="fas fa-map-marker-alt text-red-500"></i>
-                                <div>
-                                    <div class="font-bold text-sm text-slate-800">{{ res.name }}</div>
-                                    <div class="text-[10px] text-slate-400 truncate w-64">{{ res.address }}</div>
-                                </div>
+                                <i class="fas fa-map-marker-alt text-red-500"></i><div><div class="font-bold text-sm text-slate-800">{{ res.name }}</div><div class="text-[10px] text-slate-400 truncate w-64">{{ res.address }}</div></div>
                             </div>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="text-xs font-bold text-slate-400 ml-1">開始時間</label>
-                            <input v-model="tempTrip.time" type="time" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold text-center">
-                        </div>
-                        <div>
-                            <label class="text-xs font-bold text-slate-400 ml-1">停留 (分鐘)</label>
-                            <input v-model.number="tempTrip.stay" type="number" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold text-center" placeholder="60">
-                        </div>
+                        <div><label class="text-xs font-bold text-slate-400 ml-1">開始時間</label><input v-model="tempTrip.time" type="time" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold text-center"></div>
+                        <div><label class="text-xs font-bold text-slate-400 ml-1">停留 (分鐘)</label><input v-model.number="tempTrip.stay" type="number" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold text-center" placeholder="60"></div>
                     </div>
                     <div class="bg-blue-50 p-4 rounded-xl">
-                        <div class="flex justify-between items-center mb-2">
-                            <label class="text-xs font-bold text-blue-600">到下一站交通 (分)</label>
-                            <button @click="openGoogleMaps" class="text-[10px] bg-white text-blue-600 px-2 py-1 rounded shadow-sm font-bold border border-blue-100">
-                                <i class="fas fa-external-link-alt mr-1"></i>Map 估算
-                            </button>
-                        </div>
+                        <div class="flex justify-between items-center mb-2"><label class="text-xs font-bold text-blue-600">到下一站交通 (分)</label><button @click="openGoogleMaps" class="text-[10px] bg-white text-blue-600 px-2 py-1 rounded shadow-sm font-bold border border-blue-100">Map 估算</button></div>
                         <input v-model.number="tempTrip.transport" type="number" class="w-full p-3 bg-white rounded-lg outline-none font-bold text-center text-blue-800" placeholder="30">
                     </div>
-                    <div>
-                        <label class="text-xs font-bold text-slate-400 ml-1">歸屬組別</label>
-                        <select v-model="tempTrip.group" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold">
-                            <option value="all">🌍 全體參加</option>
-                            <option value="holland">🔵 荷蘭組</option>
-                            <option value="baltic">🟠 三小國</option>
-                        </select>
-                    </div>
+                    <div><label class="text-xs font-bold text-slate-400 ml-1">歸屬組別</label><select v-model="tempTrip.group" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold"><option value="all">🌍 全體參加</option><option value="holland">🔵 荷蘭組</option><option value="baltic">🟠 三小國</option></select></div>
                     <textarea v-model="tempTrip.note" placeholder="備註..." class="w-full p-4 bg-slate-50 rounded-xl outline-none h-20 text-sm"></textarea>
                     <button @click="saveTrip" class="w-full py-4 bg-slate-900 text-white rounded-xl font-bold text-lg shadow-lg">確認儲存</button>
                 </div>
@@ -260,39 +214,17 @@
                 <div class="space-y-5">
                     <input v-model="tempExp.desc" placeholder="消費項目" class="w-full p-4 bg-slate-50 rounded-xl outline-none font-bold text-lg">
                     <div class="flex gap-3">
-                        <div class="flex-1 relative">
-                            <label class="text-[10px] font-bold text-slate-400 absolute top-2 left-3">金額</label>
-                            <input v-model.number="tempExp.amount" type="number" class="w-full pt-6 pb-2 px-3 bg-slate-50 rounded-xl outline-none font-mono font-black text-xl">
-                        </div>
-                        <select v-model="tempExp.currency" class="w-24 p-2 bg-slate-100 rounded-xl outline-none font-bold text-center">
-                            <option value="TWD">NT$</option>
-                            <option value="EUR">€ EUR</option>
-                        </select>
+                        <div class="flex-1 relative"><label class="text-[10px] font-bold text-slate-400 absolute top-2 left-3">金額</label><input v-model.number="tempExp.amount" type="number" class="w-full pt-6 pb-2 px-3 bg-slate-50 rounded-xl outline-none font-mono font-black text-xl"></div>
+                        <select v-model="tempExp.currency" class="w-24 p-2 bg-slate-100 rounded-xl outline-none font-bold text-center"><option value="TWD">NT$</option><option value="EUR">€ EUR</option></select>
                     </div>
                     <div v-if="tempExp.currency === 'EUR'" class="p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between animate-slide-up">
-                        <div>
-                            <div class="text-xs font-bold text-blue-800">歐元匯率 (1€ = ? TWD)</div>
-                        </div>
+                        <div><div class="text-xs font-bold text-blue-800">歐元匯率 (1€ = ? TWD)</div></div>
                         <input v-model.number="tempExp.rate" type="number" class="w-20 bg-white border border-blue-200 rounded p-2 text-right font-bold text-blue-800 outline-none">
                     </div>
+                    <div><p class="text-[10px] font-bold text-slate-400 mb-2 uppercase">先付錢的人</p><div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1"><button v-for="p in members" @click="tempExp.payer = p" :class="tempExp.payer === p ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-500'" class="px-4 py-3 rounded-xl whitespace-nowrap text-xs font-bold transition-all flex-1">{{ p }}</button></div></div>
                     <div>
-                        <p class="text-[10px] font-bold text-slate-400 mb-2 uppercase">先付錢的人</p>
-                        <div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
-                            <button v-for="p in members" @click="tempExp.payer = p" 
-                                    :class="tempExp.payer === p ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-500'"
-                                    class="px-4 py-3 rounded-xl whitespace-nowrap text-xs font-bold transition-all flex-1">{{ p }}</button>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="flex justify-between items-center mb-2">
-                            <p class="text-[10px] font-bold text-slate-400 uppercase">分攤對象</p>
-                            <button @click="toggleAllSplit" class="text-[10px] text-blue-500 font-bold">全選/取消</button>
-                        </div>
-                        <div class="grid grid-cols-3 gap-2">
-                            <label v-for="p in members" class="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl text-xs font-bold cursor-pointer" :class="tempExp.splitWith.includes(p) ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : ''">
-                                <input type="checkbox" :value="p" v-model="tempExp.splitWith" class="hidden"> {{ p }}
-                            </label>
-                        </div>
+                        <div class="flex justify-between items-center mb-2"><p class="text-[10px] font-bold text-slate-400 uppercase">分攤對象</p><button @click="toggleAllSplit" class="text-[10px] text-blue-500 font-bold">全選/取消</button></div>
+                        <div class="grid grid-cols-3 gap-2"><label v-for="p in members" class="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl text-xs font-bold cursor-pointer" :class="tempExp.splitWith.includes(p) ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : ''"><input type="checkbox" :value="p" v-model="tempExp.splitWith" class="hidden"> {{ p }}</label></div>
                     </div>
                     <div class="flex gap-3 pt-2">
                         <button v-if="isEditingExp" @click="deleteExpense" class="flex-1 py-4 bg-red-50 text-red-500 rounded-xl font-bold">刪除</button>
@@ -303,8 +235,27 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
+
+        // ---------------------------------------------------------
+        // 你的 Firebase Config 已整合
+        // ---------------------------------------------------------
+        const firebaseConfig = {
+          apiKey: "AIzaSyC_trr15i7caUUFXdQeT54rjJj2CbPljlE",
+          authDomain: "europetrip2026-d36f1.firebaseapp.com",
+          databaseURL: "https://europetrip2026-d36f1-default-rtdb.firebaseio.com",
+          projectId: "europetrip2026-d36f1",
+          storageBucket: "europetrip2026-d36f1.firebasestorage.app",
+          messagingSenderId: "368850353659",
+          appId: "1:368850353659:web:8cc22ae3fcf13d11051f5e"
+        };
+        // ---------------------------------------------------------
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
 
         createApp({
             setup() {
@@ -312,6 +263,9 @@
                 const currentGroup = ref('all');
                 const selectedDate = ref('2026-03-19');
                 const showSettlement = ref(true);
+                const dbConnected = ref(false);
+                const loading = ref(true);
+
                 const members = ['媽媽', '佩琪', '恩琪', '一休', '錦盆'];
                 const groupMap = { holland: '荷蘭組', baltic: '三小國', all: '全體' };
                 const dateRange = [];
@@ -321,15 +275,28 @@
                     dateRange.push(d.toISOString().split('T')[0]);
                 }
 
-                const schedule = ref([
-                    { id: 101, date: '2026-03-19', time: '09:00', stay: 60, transport: 60, location: '荷蘭機場', group: 'holland', lat: 52.3, lon: 4.7, note: 'T1集合' },
-                    { id: 102, date: '2026-03-19', time: '09:30', stay: 60, transport: 30, location: '愛沙尼亞機場', group: 'baltic', lat: 59.4, lon: 24.7, note: '租車' }
-                ]);
-                const expenses = ref([
-                    { id: 201, date: '2026-03-19', desc: '機場咖啡', amount: 500, currency: 'TWD', rate: 37, payer: '佩琪', splitWith: ['媽媽', '佩琪'] }
-                ]);
+                const schedule = ref([]);
+                const expenses = ref([]);
 
-                // Sortable
+                // 1. 初始化監聽 (Real-time Sync)
+                onMounted(() => {
+                    // Listen to Schedule
+                    const qSchedule = collection(db, "schedule");
+                    onSnapshot(qSchedule, (snapshot) => {
+                        schedule.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        loading.value = false;
+                        dbConnected.value = true;
+                        if (activeTab.value === 'schedule') nextTick(initSortable);
+                    });
+
+                    // Listen to Expenses
+                    const qExpenses = collection(db, "expenses");
+                    onSnapshot(qExpenses, (snapshot) => {
+                        expenses.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    });
+                });
+
+                // Sortable Logic (Updated for Firebase)
                 let sortableInstance = null;
                 const initSortable = () => {
                     const el = document.getElementById('schedule-list');
@@ -337,74 +304,80 @@
                     if (sortableInstance) sortableInstance.destroy();
                     sortableInstance = new Sortable(el, {
                         animation: 200, delay: 150, delayOnTouchOnly: true, handle: '.schedule-item',
-                        onEnd: (evt) => {
+                        onEnd: async (evt) => {
                             const { oldIndex, newIndex } = evt;
                             if (oldIndex === newIndex) return;
-                            
-                            // 關鍵修復：只對「可見行程」進行重新排序
-                            // 1. 取得當前可見的行程副本 (這些是 DOM 顯示的順序)
+
                             const visibleItems = [...filteredSchedule.value];
-                            
-                            // 2. 移動元素
                             const movedItem = visibleItems.splice(oldIndex, 1)[0];
                             visibleItems.splice(newIndex, 0, movedItem);
-                            
-                            // 3. 取得「當日」但「非可見」的行程 (例如在荷蘭視圖時的三小國行程)
-                            // 這些行程要保留不動
-                            const dayHiddenItems = schedule.value.filter(i => 
-                                i.date === selectedDate.value && 
-                                !(currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all')
-                            );
-                            
-                            // 4. 取得「非當日」的行程
-                            const otherDayItems = schedule.value.filter(i => i.date !== selectedDate.value);
-                            
-                            // 5. 合併所有資料：非當日 + 當日隱藏 + 當日可見(已排序)
-                            schedule.value = [...otherDayItems, ...dayHiddenItems, ...visibleItems];
-                            
-                            // 6. 觸發時間重算
-                            nextTick(() => autoCalculateTime());
+
+                            let currentTime = new Date(`2000-01-01T${visibleItems[0].time}`);
+                            const batch = writeBatch(db);
+
+                            visibleItems.forEach((item, index) => {
+                                if (index > 0) {
+                                    const prevItem = visibleItems[index - 1];
+                                    const addMin = (prevItem.stay || 0) + (prevItem.transport || 0);
+                                    currentTime.setMinutes(currentTime.getMinutes() + addMin);
+                                    const h = String(currentTime.getHours()).padStart(2, '0');
+                                    const m = String(currentTime.getMinutes()).padStart(2, '0');
+                                    item.time = `${h}:${m}`;
+                                }
+                                const ref = doc(db, "schedule", item.id);
+                                batch.update(ref, { time: item.time }); 
+                            });
+
+                            await batch.commit();
                         }
                     });
                 };
 
-                // 時間計算：以各自組別為主
-                const autoCalculateTime = () => {
-                    // 只針對「目前過濾出來的列表」進行計算
-                    // 這意味著如果你在「荷蘭組」視圖，你只會重算荷蘭組的時間，三小國的不會動
-                    const visibleItems = filteredSchedule.value;
-                    
-                    if (visibleItems.length === 0) return;
-                    
-                    // 以該視圖的第一個行程時間為基準
-                    let currentTime = new Date(`2000-01-01T${visibleItems[0].time}`);
-                    
-                    for (let i = 0; i < visibleItems.length - 1; i++) {
-                        const currentItem = visibleItems[i];
-                        const nextItem = visibleItems[i+1];
-                        
-                        const addMin = (currentItem.stay || 0) + (currentItem.transport || 0);
-                        currentTime.setMinutes(currentTime.getMinutes() + addMin);
-                        
-                        const h = String(currentTime.getHours()).padStart(2, '0');
-                        const m = String(currentTime.getMinutes()).padStart(2, '0');
-                        
-                        // 直接修改物件參考，會反應到 schedule.value
-                        nextItem.time = `${h}:${m}`;
+                // CRUD Functions
+                const saveTrip = async () => {
+                    if (isEditing.value) {
+                        const tripRef = doc(db, "schedule", tempTrip.value.id);
+                        const { id, ...data } = tempTrip.value; 
+                        await updateDoc(tripRef, data);
+                    } else {
+                        await addDoc(collection(db, "schedule"), tempTrip.value);
                     }
+                    showTripModal.value = false;
                 };
 
-                watch(activeTab, (val) => { if (val === 'schedule') nextTick(initSortable); });
-                watch(selectedDate, () => { if (activeTab.value === 'schedule') nextTick(initSortable); });
-                onMounted(() => { if (activeTab.value === 'schedule') initSortable(); });
+                const deleteItem = async () => {
+                    await deleteDoc(doc(db, "schedule", tempTrip.value.id));
+                    showTripModal.value = false;
+                };
 
-                // Computed
+                const copyItem = async () => {
+                    const newItem = { ...tempTrip.value, date: copyTargetDate.value };
+                    delete newItem.id; 
+                    await addDoc(collection(db, "schedule"), newItem);
+                    showCopyMenu.value = false; showTripModal.value = false; 
+                    alert('已複製到雲端');
+                };
+
+                const saveExpense = async () => {
+                    tempExp.value.date = selectedDate.value;
+                    if (isEditingExp.value) {
+                         const expRef = doc(db, "expenses", tempExp.value.id);
+                         const { id, ...data } = tempExp.value;
+                         await updateDoc(expRef, data);
+                    } else {
+                         await addDoc(collection(db, "expenses"), tempExp.value);
+                    }
+                    showExpModal.value = false;
+                };
+
+                const deleteExpense = async () => {
+                    await deleteDoc(doc(db, "expenses", tempExp.value.id));
+                    showExpModal.value = false;
+                };
+
                 const filteredSchedule = computed(() => {
-                    // 不做 sort，順序由 user 拖曳決定 (schedule.value 的物理順序)
-                    return schedule.value.filter(i => 
-                        i.date === selectedDate.value && 
-                        (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all')
-                    );
+                    let list = schedule.value.filter(i => i.date === selectedDate.value && (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all'));
+                    return list.sort((a, b) => a.time.localeCompare(b.time));
                 });
                 
                 const filteredExpenses = computed(() => expenses.value.filter(e => e.date === selectedDate.value));
@@ -424,8 +397,25 @@
                     return days;
                 });
                 const hasExpense = (d) => expenses.value.some(e => e.date === d);
+                
+                const balances = computed(() => { let b = {}; members.forEach(m => b[m] = 0); expenses.value.forEach(e => { const val = e.currency === 'EUR' ? e.amount * (e.rate || 37) : e.amount; b[e.payer] += val; const share = val / e.splitWith.length; e.splitWith.forEach(m => b[m] -= share); }); return b; });
+                const settlements = computed(() => { const b = { ...balances.value }; const debtors = [], creditors = []; for (let m in b) { if (b[m] < -1) debtors.push({ name: m, amount: Math.abs(b[m]) }); else if (b[m] > 1) creditors.push({ name: m, amount: b[m] }); } const res = []; let i = 0, j = 0; while (i < debtors.length && j < creditors.length) { const amt = Math.min(debtors[i].amount, creditors[j].amount); res.push({ from: debtors[i].name, to: creditors[j].name, amount: amt }); debtors[i].amount -= amt; creditors[j].amount -= amt; if (debtors[i].amount < 1) i++; if (creditors[j].amount < 1) j++; } return res; });
 
-                // Map & Others
+                const showTripModal = ref(false); const showExpModal = ref(false); const isEditing = ref(false); const isEditingExp = ref(false);
+                const tempTrip = ref({}); const tempExp = ref({}); const showCopyMenu = ref(false); const copyTargetDate = ref('');
+                const osmResults = ref([]); const searchTimeout = ref(null);
+
+                const debouncedSearch = () => { clearTimeout(searchTimeout.value); searchTimeout.value = setTimeout(searchOSM, 500); };
+                const searchOSM = async () => { if (!tempTrip.value.location) return; try { const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(tempTrip.value.location)}&limit=5`); const data = await res.json(); osmResults.value = data.map(item => ({ name: item.display_name.split(',')[0], address: item.display_name, lat: parseFloat(item.lat), lon: parseFloat(item.lon) })); } catch (e) {} };
+                const selectOSM = (res) => { tempTrip.value.location = res.name; tempTrip.value.lat = res.lat; tempTrip.value.lon = res.lon; osmResults.value = []; };
+                const formatDate = (d) => { const p = d.split('-'); return `${p[1]}/${p[2]}`; };
+                const getGroupName = (g) => groupMap[g];
+                const openQuickAdd = () => { if (activeTab.value === 'split') { isEditingExp.value = false; tempExp.value = { desc: '', amount: null, currency: 'TWD', payer: '媽媽', splitWith: [...members], rate: 37 }; showExpModal.value = true; } else { isEditing.value = false; tempTrip.value = { date: selectedDate.value, time: '09:00', stay: 60, transport: 30, location: '', group: currentGroup.value === 'all' ? 'all' : currentGroup.value }; showTripModal.value = true; } };
+                const openEditModal = (item) => { isEditing.value = true; tempTrip.value = { ...item }; copyTargetDate.value = item.date; showCopyMenu.value = false; showTripModal.value = true; };
+                const openEditExpense = (e) => { isEditingExp.value = true; tempExp.value = { ...e }; showExpModal.value = true; };
+                const toggleAllSplit = () => { tempExp.value.splitWith = tempExp.value.splitWith.length === members.length ? [] : [...members]; };
+                const openGoogleMaps = () => { const list = filteredSchedule.value; const idx = list.findIndex(s => s.id === tempTrip.value.id); let origin = idx > 0 ? list[idx - 1].location : (list.length > 0 ? list[list.length - 1].location : ""); if (origin && tempTrip.value.location) window.open(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(tempTrip.value.location)}&travelmode=driving`, '_blank'); };
+                
                 let map = null; let markers = [];
                 const initMap = () => { if (map) return; map = L.map('map-container').setView([52.3, 4.7], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); };
                 const updateMap = () => {
@@ -442,44 +432,15 @@
                     }
                 };
                 watch(activeTab, (val) => { if (val === 'map') nextTick(() => { initMap(); updateMap(); }); });
-
-                // Modal
-                const showTripModal = ref(false); const showExpModal = ref(false); const isEditing = ref(false); const isEditingExp = ref(false);
-                const tempTrip = ref({}); const tempExp = ref({}); const showCopyMenu = ref(false); const copyTargetDate = ref('');
-                const osmResults = ref([]); const searchTimeout = ref(null);
-                const debouncedSearch = () => { clearTimeout(searchTimeout.value); searchTimeout.value = setTimeout(searchOSM, 500); };
-                const searchOSM = async () => { if (!tempTrip.value.location) return; try { const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(tempTrip.value.location)}&limit=5`); const data = await res.json(); osmResults.value = data.map(item => ({ name: item.display_name.split(',')[0], address: item.display_name, lat: parseFloat(item.lat), lon: parseFloat(item.lon) })); } catch (e) {} };
-                const selectOSM = (res) => { tempTrip.value.location = res.name; tempTrip.value.lat = res.lat; tempTrip.value.lon = res.lon; osmResults.value = []; };
-
-                const openQuickAdd = () => {
-                    if (activeTab.value === 'split') { isEditingExp.value = false; tempExp.value = { id: Date.now(), desc: '', amount: null, currency: 'TWD', payer: '媽媽', splitWith: [...members], rate: 37 }; showExpModal.value = true; }
-                    else { isEditing.value = false; tempTrip.value = { id: Date.now(), date: selectedDate.value, time: '09:00', stay: 60, transport: 30, location: '', group: currentGroup.value === 'all' ? 'all' : currentGroup.value }; showTripModal.value = true; }
-                };
-                const openEditModal = (item) => { isEditing.value = true; tempTrip.value = { ...item }; copyTargetDate.value = item.date; showCopyMenu.value = false; showTripModal.value = true; };
-                const saveTrip = () => { if (isEditing.value) { const idx = schedule.value.findIndex(s => s.id === tempTrip.value.id); schedule.value[idx] = { ...tempTrip.value }; } else { schedule.value.push({ ...tempTrip.value }); } nextTick(() => autoCalculateTime()); showTripModal.value = false; };
-                const copyItem = () => { schedule.value.push({ ...tempTrip.value, id: Date.now(), date: copyTargetDate.value }); showCopyMenu.value = false; showTripModal.value = false; alert('已複製'); };
-                const deleteItem = () => { schedule.value = schedule.value.filter(s => s.id !== tempTrip.value.id); showTripModal.value = false; };
-                const openGoogleMaps = () => { const list = filteredSchedule.value; const idx = list.findIndex(s => s.id === tempTrip.value.id); let origin = idx > 0 ? list[idx - 1].location : (list.length > 0 ? list[list.length - 1].location : ""); if (origin && tempTrip.value.location) window.open(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(tempTrip.value.location)}&travelmode=driving`, '_blank'); };
-
-                const openEditExpense = (e) => { isEditingExp.value = true; tempExp.value = JSON.parse(JSON.stringify(e)); showExpModal.value = true; };
-                const saveExpense = () => { tempExp.value.date = selectedDate.value; if (isEditingExp.value) { const idx = expenses.value.findIndex(e => e.id === tempExp.value.id); expenses.value[idx] = { ...tempExp.value }; } else { expenses.value.push({ ...tempExp.value, id: Date.now() }); } showExpModal.value = false; };
-                const deleteExpense = () => { expenses.value = expenses.value.filter(e => e.id !== tempExp.value.id); showExpModal.value = false; };
-                const toggleAllSplit = () => { tempExp.value.splitWith = tempExp.value.splitWith.length === members.length ? [] : [...members]; };
-                
-                const balances = computed(() => { let b = {}; members.forEach(m => b[m] = 0); expenses.value.forEach(e => { const val = e.currency === 'EUR' ? e.amount * (e.rate || 37) : e.amount; b[e.payer] += val; const share = val / e.splitWith.length; e.splitWith.forEach(m => b[m] -= share); }); return b; });
-                const settlements = computed(() => { const b = { ...balances.value }; const debtors = [], creditors = []; for (let m in b) { if (b[m] < -1) debtors.push({ name: m, amount: Math.abs(b[m]) }); else if (b[m] > 1) creditors.push({ name: m, amount: b[m] }); } const res = []; let i = 0, j = 0; while (i < debtors.length && j < creditors.length) { const amt = Math.min(debtors[i].amount, creditors[j].amount); res.push({ from: debtors[i].name, to: creditors[j].name, amount: amt }); debtors[i].amount -= amt; creditors[j].amount -= amt; if (debtors[i].amount < 1) i++; if (creditors[j].amount < 1) j++; } return res; });
-
-                const formatDate = (d) => { const p = d.split('-'); return `${p[1]}/${p[2]}`; };
-                const getGroupName = (g) => groupMap[g];
+                watch(selectedDate, () => { if (activeTab.value === 'schedule') nextTick(initSortable); });
 
                 return {
-                    activeTab, currentGroup, selectedDate, dateRange, members, getGroupName,
-                    schedule, filteredSchedule, expenses, filteredExpenses, balances, settlements, showSettlement,
+                    activeTab, currentGroup, selectedDate, dateRange, members, getGroupName, dbConnected, loading,
+                    filteredSchedule, filteredExpenses, balances, settlements, showSettlement,
                     showTripModal, showExpModal, isEditing, isEditingExp, tempTrip, tempExp,
                     osmResults, debouncedSearch, selectOSM,
                     openQuickAdd, openEditModal, saveTrip, deleteItem, openEditExpense, saveExpense, deleteExpense,
-                    formatDate, toggleAllSplit, openGoogleMaps, copyItem, showCopyMenu, copyTargetDate,
-                    calendarDays, hasExpense
+                    formatDate, toggleAllSplit, openGoogleMaps, copyItem, showCopyMenu, copyTargetDate, calendarDays, hasExpense
                 };
             }
         }).mount('#app');
