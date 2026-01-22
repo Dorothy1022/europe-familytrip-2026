@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程 (診斷版)</title>
+    <title>北歐旅程 (雲端同步版)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -28,18 +28,13 @@
         
         <div v-if="errorMessage" class="bg-red-500 text-white p-3 text-xs font-bold text-center z-50">
             <i class="fas fa-exclamation-triangle mr-1"></i> 連線錯誤：{{ errorMessage }}
-            <div class="mt-1 font-normal opacity-80">請檢查 Firebase Console 的 Rules 設定</div>
         </div>
 
         <header class="bg-white pt-4 px-4 border-b shrink-0 z-20">
             <div class="flex justify-between items-center mb-3">
                 <h1 class="text-xl font-black italic tracking-tighter text-slate-800 uppercase">Nordic 2026 
-                    <span class="text-[10px] not-italic bg-green-100 text-green-600 px-2 py-1 rounded ml-2" v-if="dbConnected">
-                        <i class="fas fa-check-circle"></i> 已連線
-                    </span>
-                    <span class="text-[10px] not-italic bg-gray-100 text-gray-500 px-2 py-1 rounded ml-2" v-else-if="!errorMessage">
-                        <i class="fas fa-circle-notch fa-spin"></i> 連線中...
-                    </span>
+                    <span class="text-[10px] not-italic bg-green-100 text-green-600 px-2 py-1 rounded ml-2" v-if="dbConnected"><i class="fas fa-check-circle"></i> 已連線</span>
+                    <span class="text-[10px] not-italic bg-gray-100 text-gray-500 px-2 py-1 rounded ml-2" v-else-if="!errorMessage"><i class="fas fa-circle-notch fa-spin"></i> 連線中...</span>
                 </h1>
                 <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
                     <button @click="currentGroup = 'all'" :class="currentGroup === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-400'" class="px-3 py-1.5 rounded-lg transition-all">全體</button>
@@ -65,9 +60,7 @@
                 <div v-if="!dbConnected && !errorMessage" class="text-center py-10 text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>正在連接資料庫...</div>
                 
                 <div id="schedule-list" class="space-y-0 pb-10" v-else>
-                    <div v-if="filteredSchedule.length === 0" class="text-center py-10 text-slate-300 font-bold border-2 border-dashed border-slate-200 rounded-2xl">
-                        這天還沒有行程<br>點下方按鈕新增
-                    </div>
+                    <div v-if="filteredSchedule.length === 0" class="text-center py-10 text-slate-300 font-bold border-2 border-dashed border-slate-200 rounded-2xl">當日尚無行程</div>
                     <div v-for="(item, index) in filteredSchedule" :key="item.id" :data-id="item.id"
                          class="relative pl-2 mb-2 schedule-item select-none touch-manipulation" 
                          :class="{'timeline-line': index !== filteredSchedule.length - 1, 'timeline-last': index === filteredSchedule.length - 1}">
@@ -231,8 +224,15 @@
                     </div>
                     <div><p class="text-[10px] font-bold text-slate-400 mb-2 uppercase">先付錢的人</p><div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1"><button v-for="p in members" @click="tempExp.payer = p" :class="tempExp.payer === p ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-500'" class="px-4 py-3 rounded-xl whitespace-nowrap text-xs font-bold transition-all flex-1">{{ p }}</button></div></div>
                     <div>
-                        <div class="flex justify-between items-center mb-2"><p class="text-[10px] font-bold text-slate-400 uppercase">分攤對象</p><button @click="toggleAllSplit" class="text-[10px] text-blue-500 font-bold">全選/取消</button></div>
-                        <div class="grid grid-cols-3 gap-2"><label v-for="p in members" class="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl text-xs font-bold cursor-pointer" :class="tempExp.splitWith.includes(p) ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : ''"><input type="checkbox" :value="p" v-model="tempExp.splitWith" class="hidden"> {{ p }}</label></div>
+                        <div class="flex justify-between items-end mb-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase">分攤對象</p>
+                            <div class="flex gap-2">
+                                <button @click="setSplitGroup('all')" class="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold hover:bg-slate-200">全選</button>
+                                <button @click="setSplitGroup('holland')" class="text-[10px] bg-blue-50 px-2 py-1 rounded text-blue-500 font-bold hover:bg-blue-100">荷蘭</button>
+                                <button @click="setSplitGroup('baltic')" class="text-[10px] bg-orange-50 px-2 py-1 rounded text-orange-500 font-bold hover:bg-orange-100">三小國</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2"><label v-for="p in members" class="flex items-center justify-center gap-2 p-3 bg-slate-50 rounded-xl text-xs font-bold cursor-pointer transition-colors" :class="tempExp.splitWith.includes(p) ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200' : ''"><input type="checkbox" :value="p" v-model="tempExp.splitWith" class="hidden"> {{ p }}</label></div>
                     </div>
                     <div class="flex gap-3 pt-2">
                         <button v-if="isEditingExp" @click="deleteExpense" class="flex-1 py-4 bg-red-50 text-red-500 rounded-xl font-bold">刪除</button>
@@ -250,16 +250,11 @@
         const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
 
         // ---------------------------------------------------------
-        // Config Integrated!
+        // 請填入妳的 Config
         // ---------------------------------------------------------
         const firebaseConfig = {
-          apiKey: "AIzaSyC_trr15i7caUUFXdQeT54rjJj2CbPljlE",
-          authDomain: "europetrip2026-d36f1.firebaseapp.com",
-          databaseURL: "https://europetrip2026-d36f1-default-rtdb.firebaseio.com",
-          projectId: "europetrip2026-d36f1",
-          storageBucket: "europetrip2026-d36f1.firebasestorage.app",
-          messagingSenderId: "368850353659",
-          appId: "1:368850353659:web:8cc22ae3fcf13d11051f5e"
+           // 在這裡貼上妳的 config ...
+           // apiKey: "...",
         };
         // ---------------------------------------------------------
 
@@ -279,6 +274,13 @@
 
                 const members = ['媽媽', '佩琪', '恩琪', '一休', '錦盆'];
                 const groupMap = { holland: '荷蘭組', baltic: '三小國', all: '全體' };
+                // 增加組別定義，用於快速選取
+                const groupMembers = {
+                    holland: ['媽媽', '佩琪', '錦盆'],
+                    baltic: ['恩琪', '一休'],
+                    all: ['媽媽', '佩琪', '恩琪', '一休', '錦盆']
+                };
+
                 const dateRange = [];
                 const start = new Date('2026-03-19');
                 const end = new Date('2026-04-04');
@@ -289,7 +291,7 @@
                 const schedule = ref([]);
                 const expenses = ref([]);
 
-                // 1. Init Data Listeners (with Error Handling)
+                // 1. Init Data Listeners
                 onMounted(() => {
                     const qSchedule = collection(db, "schedule");
                     onSnapshot(qSchedule, 
@@ -434,6 +436,8 @@
                 const openQuickAdd = () => { if (activeTab.value === 'split') { isEditingExp.value = false; tempExp.value = { desc: '', amount: null, currency: 'TWD', payer: '媽媽', splitWith: [...members], rate: 37 }; showExpModal.value = true; } else { isEditing.value = false; tempTrip.value = { date: selectedDate.value, time: '09:00', stay: 60, transport: 30, location: '', group: currentGroup.value === 'all' ? 'all' : currentGroup.value }; showTripModal.value = true; } };
                 const openEditModal = (item) => { isEditing.value = true; tempTrip.value = { ...item }; copyTargetDate.value = item.date; showCopyMenu.value = false; showTripModal.value = true; };
                 const openEditExpense = (e) => { isEditingExp.value = true; tempExp.value = { ...e }; showExpModal.value = true; };
+                // 新增：快速設定分攤組別
+                const setSplitGroup = (group) => { tempExp.value.splitWith = [...groupMembers[group]]; };
                 const toggleAllSplit = () => { tempExp.value.splitWith = tempExp.value.splitWith.length === members.length ? [] : [...members]; };
                 const openGoogleMaps = () => { const list = filteredSchedule.value; const idx = list.findIndex(s => s.id === tempTrip.value.id); let origin = idx > 0 ? list[idx - 1].location : (list.length > 0 ? list[list.length - 1].location : ""); if (origin && tempTrip.value.location) window.open(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(tempTrip.value.location)}&travelmode=driving`, '_blank'); };
                 
@@ -461,7 +465,7 @@
                     showTripModal, showExpModal, isEditing, isEditingExp, tempTrip, tempExp,
                     osmResults, debouncedSearch, selectOSM,
                     openQuickAdd, openEditModal, saveTrip, deleteItem, openEditExpense, saveExpense, deleteExpense,
-                    formatDate, toggleAllSplit, openGoogleMaps, copyItem, showCopyMenu, copyTargetDate, calendarDays, hasExpense
+                    formatDate, toggleAllSplit, setSplitGroup, openGoogleMaps, copyItem, showCopyMenu, copyTargetDate, calendarDays, hasExpense
                 };
             }
         }).mount('#app');
