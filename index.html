@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程 (雲端同步最終版)</title>
+    <title>北歐旅程 (V8 MapFix)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,6 +21,9 @@
         .sortable-ghost { opacity: 0.2; background: #bfdbfe; border: 2px dashed #3b82f6; }
         .sortable-drag { opacity: 0.9; transform: scale(1.02); cursor: grabbing; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        /* 統計切換動畫 */
+        .slide-enter-active, .slide-leave-active { transition: all 0.3s ease; max-height: 200px; opacity: 1; overflow: hidden; }
+        .slide-enter-from, .slide-leave-to { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
     </style>
 </head>
 <body class="bg-slate-50 font-sans text-slate-900 overflow-hidden">
@@ -106,18 +109,46 @@
             </section>
 
             <section v-if="activeTab === 'split'" class="p-4 space-y-4 pb-32">
-                 <div class="bg-slate-900 text-white p-6 rounded-[2rem] shadow-xl">
-                    <div @click="showSettlement = !showSettlement" class="flex justify-between items-center cursor-pointer">
-                        <div><p class="text-[10px] opacity-60 uppercase tracking-widest">結算報告 (TWD)</p><p class="text-3xl font-black">應付帳款</p></div>
-                        <i class="fas" :class="showSettlement ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-                    </div>
-                    <div v-show="showSettlement" class="mt-6 space-y-3 pt-6 border-t border-white/10">
-                        <div v-if="settlements.length === 0" class="text-center text-sm opacity-50">目前帳目平衡</div>
-                        <div v-for="s in settlements" class="bg-white/5 p-3 rounded-xl flex items-center justify-between">
-                            <span class="text-sm font-bold"><span class="text-red-400">{{ s.from }}</span> <i class="fas fa-arrow-right text-[10px] mx-1"></i> <span class="text-green-400">{{ s.to }}</span></span>
-                            <span class="font-mono font-black text-blue-400">NT$ {{ Math.round(s.amount) }}</span>
+                 <div class="bg-slate-900 text-white p-6 rounded-[2rem] shadow-xl overflow-hidden transition-all duration-300">
+                    
+                    <div class="mb-4">
+                        <p class="text-[10px] opacity-60 uppercase tracking-widest mb-3 font-bold">應付帳款 (結算報告)</p>
+                        
+                        <div v-if="settlements.length === 0" class="text-center text-sm opacity-50 py-2">目前帳目平衡，無須轉帳</div>
+                        
+                        <div class="space-y-2">
+                            <div v-for="s in settlements" class="bg-white/10 px-3 py-2 rounded-lg flex items-center justify-between">
+                                <span class="text-sm font-bold flex items-center gap-2">
+                                    <span class="text-red-300">{{ s.from }}</span> 
+                                    <i class="fas fa-caret-right text-white/40"></i> 
+                                    <span class="text-green-300">{{ s.to }}</span>
+                                </span>
+                                <span class="font-mono font-black text-blue-300">NT$ {{ Math.round(s.amount) }}</span>
+                            </div>
                         </div>
                     </div>
+
+                    <div @click="showStats = !showStats" class="border-t border-white/10 pt-3 mt-2 flex justify-between items-center cursor-pointer hover:bg-white/5 -mx-6 px-6 py-2 transition-colors">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-chart-pie text-xs opacity-70"></i>
+                            <span class="text-xs font-bold">查看總支出統計</span>
+                        </div>
+                        <i class="fas text-xs opacity-50 transition-transform duration-300" :class="showStats ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    </div>
+
+                    <transition name="slide">
+                        <div v-if="showStats" class="pt-4 border-t border-white/5">
+                            <div class="flex bg-white/10 p-1 rounded-lg text-[10px] font-bold mb-4">
+                                <button @click.stop="statsFilter = 'all'" :class="statsFilter === 'all' ? 'bg-white text-slate-900 shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">全體</button>
+                                <button @click.stop="statsFilter = 'holland'" :class="statsFilter === 'holland' ? 'bg-blue-500 text-white shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">荷蘭</button>
+                                <button @click.stop="statsFilter = 'baltic'" :class="statsFilter === 'baltic' ? 'bg-orange-500 text-white shadow' : 'text-slate-400'" class="flex-1 py-1.5 rounded transition-all">三小國</button>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-[10px] opacity-60 uppercase">該組別累積總支出</p>
+                                <p class="text-3xl font-black mt-1 text-yellow-400">NT$ {{ Math.round(statsTotal).toLocaleString() }}</p>
+                            </div>
+                        </div>
+                    </transition>
                 </div>
 
                 <div class="flex overflow-x-auto hide-scrollbar gap-2">
@@ -248,9 +279,6 @@
         import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         const { createApp, ref, computed, watch, nextTick, onMounted } = Vue;
 
-        // ---------------------------------------------------------
-        // 已自動為妳填入資訊！
-        // ---------------------------------------------------------
         const firebaseConfig = {
           apiKey: "AIzaSyC_trr15i7caUUFXdQeT54rjJj2CbPljlE",
           authDomain: "europetrip2026-d36f1.firebaseapp.com",
@@ -260,7 +288,6 @@
           messagingSenderId: "368850353659",
           appId: "1:368850353659:web:8cc22ae3fcf13d11051f5e"
         };
-        // ---------------------------------------------------------
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
@@ -270,14 +297,15 @@
                 const activeTab = ref('schedule');
                 const currentGroup = ref('all');
                 const selectedDate = ref('2026-03-19');
-                const showSettlement = ref(true);
+                const showSettlement = ref(true); // 黑色卡片是否顯示詳細 (目前用於CSS transition)
+                const showStats = ref(false); // 是否顯示統計區塊
+                const statsFilter = ref('all'); // 統計過濾器
                 const dbConnected = ref(false);
                 const loading = ref(true);
                 const errorMessage = ref('');
 
                 const members = ['媽媽', '佩琪', '恩琪', '一休', '錦盆'];
                 const groupMap = { holland: '荷蘭組', baltic: '三小國', all: '全體' };
-                // 定義組別對應名單
                 const groupMembers = {
                     holland: ['媽媽', '佩琪', '錦盆'],
                     baltic: ['恩琪', '一休'],
@@ -371,7 +399,23 @@
                     let list = schedule.value.filter(i => i.date === selectedDate.value && (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all'));
                     return list.sort((a, b) => a.time.localeCompare(b.time));
                 });
+                
+                // --- Map Fix & UI Logic ---
                 const filteredExpenses = computed(() => expenses.value.filter(e => e.date === selectedDate.value));
+                
+                // 統計計算 (依據分攤對象是否包含該組成員)
+                const statsTotal = computed(() => {
+                    return expenses.value.reduce((sum, exp) => {
+                        const amt = exp.currency === 'EUR' ? exp.amount * (exp.rate || 37) : exp.amount;
+                        if (statsFilter.value === 'all') return sum + amt;
+                        const targetMembers = groupMembers[statsFilter.value];
+                        // 邏輯：只要該筆支出的「分攤對象」裡有該組成員，就計入該組的總開銷 (總額)
+                        // 若要更精確只算"該組的份額"，邏輯會更複雜，這裡先算"該組參與的總活動金額"
+                        const isInvolved = exp.splitWith.some(m => targetMembers.includes(m));
+                        return isInvolved ? sum + amt : sum;
+                    }, 0);
+                });
+
                 const calendarDays = computed(() => {
                     const curr = new Date(selectedDate.value);
                     const y = curr.getFullYear(), m = curr.getMonth();
@@ -403,7 +447,6 @@
                 const openQuickAdd = () => { if (activeTab.value === 'split') { isEditingExp.value = false; tempExp.value = { desc: '', amount: null, currency: 'TWD', payer: '媽媽', splitWith: [...members], rate: 37 }; showExpModal.value = true; } else { isEditing.value = false; tempTrip.value = { date: selectedDate.value, time: '09:00', stay: 60, transport: 30, location: '', group: currentGroup.value === 'all' ? 'all' : currentGroup.value }; showTripModal.value = true; } };
                 const openEditModal = (item) => { isEditing.value = true; tempTrip.value = { ...item }; copyTargetDate.value = item.date; showCopyMenu.value = false; showTripModal.value = true; };
                 const openEditExpense = (e) => { isEditingExp.value = true; tempExp.value = { ...e }; showExpModal.value = true; };
-                // 修改：實作快速選取
                 const setSplitGroup = (group) => { tempExp.value.splitWith = [...groupMembers[group]]; };
                 const toggleAllSplit = () => { tempExp.value.splitWith = tempExp.value.splitWith.length === members.length ? [] : [...members]; };
                 const openGoogleMaps = () => { const list = filteredSchedule.value; const idx = list.findIndex(s => s.id === tempTrip.value.id); let origin = idx > 0 ? list[idx - 1].location : (list.length > 0 ? list[list.length - 1].location : ""); if (origin && tempTrip.value.location) window.open(`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(tempTrip.value.location)}&travelmode=driving`, '_blank'); };
@@ -424,11 +467,13 @@
                     }
                 };
                 watch(activeTab, (val) => { if (val === 'map') nextTick(() => { initMap(); updateMap(); }); });
+                // 關鍵修復：監聽 filteredSchedule 變動，確保地圖即時更新
+                watch(filteredSchedule, () => { if (activeTab.value === 'map') nextTick(updateMap); }, { deep: true });
                 watch(selectedDate, () => { if (activeTab.value === 'schedule') nextTick(initSortable); });
 
                 return {
                     activeTab, currentGroup, selectedDate, dateRange, members, getGroupName, dbConnected, loading, errorMessage,
-                    filteredSchedule, filteredExpenses, balances, settlements, showSettlement,
+                    filteredSchedule, filteredExpenses, balances, settlements, showSettlement, showStats, statsFilter, statsTotal,
                     showTripModal, showExpModal, isEditing, isEditingExp, tempTrip, tempExp,
                     osmResults, debouncedSearch, selectOSM,
                     openQuickAdd, openEditModal, saveTrip, deleteItem, openEditExpense, saveExpense, deleteExpense,
