@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>北歐旅程小幫手 Final+Calendar</title>
+    <title>北歐旅程小幫手 Final Fix</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,7 +22,6 @@
         .timeline-last::before { display: none; }
         .sortable-ghost { opacity: 0.2; background: #bfdbfe; border: 2px dashed #3b82f6; }
         .sortable-drag { opacity: 0.9; transform: scale(1.02); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); cursor: grabbing; }
-        /* 月曆樣式 */
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
     </style>
 </head>
@@ -54,7 +53,7 @@
             <section v-if="activeTab === 'schedule'" class="p-4">
                 <div class="flex justify-between items-center mb-4 bg-blue-50 p-3 rounded-xl border border-blue-100">
                     <h2 class="text-xs font-bold text-blue-600"><i class="fas fa-magic mr-1"></i>移動行程將自動重算時間</h2>
-                    <div class="text-[10px] text-blue-400">長按卡片即可排序</div>
+                    <div class="text-[10px] text-blue-400">目前針對：{{ getGroupName(currentGroup) }} 計算</div>
                 </div>
 
                 <div id="schedule-list" class="space-y-0 pb-10">
@@ -136,12 +135,10 @@
                 </div>
 
                 <div class="bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
-                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">選擇日期查看支出 ({{formatDate(selectedDate)}})</h3>
-                    
+                    <h3 class="text-xs font-bold text-slate-400 mb-3 ml-1">選擇日期 ({{formatDate(selectedDate)}})</h3>
                     <div class="calendar-grid mb-1">
                         <div v-for="d in ['日','一','二','三','四','五','六']" class="text-center text-[10px] text-slate-300 font-bold">{{d}}</div>
                     </div>
-                    
                     <div class="calendar-grid">
                         <div v-for="d in calendarDays" :key="d.date" 
                              @click="selectedDate = d.fullDate"
@@ -156,8 +153,6 @@
                     </div>
                 </div>
 
-                <h3 class="font-black text-slate-800 ml-1">當日明細</h3>
-                <div v-if="filteredExpenses.length === 0" class="text-center py-4 text-slate-300 text-sm font-bold">這天沒有支出紀錄</div>
                 <div v-for="exp in filteredExpenses" :key="exp.id" @click="openEditExpense(exp)" class="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-slate-50 active:bg-slate-50">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-600">{{ exp.payer[0] }}</div>
@@ -317,7 +312,6 @@
                 const currentGroup = ref('all');
                 const selectedDate = ref('2026-03-19');
                 const showSettlement = ref(true);
-                
                 const members = ['媽媽', '佩琪', '恩琪', '一休', '錦盆'];
                 const groupMap = { holland: '荷蘭組', baltic: '三小國', all: '全體' };
                 const dateRange = [];
@@ -328,7 +322,8 @@
                 }
 
                 const schedule = ref([
-                    { id: 101, date: '2026-03-19', time: '09:00', stay: 60, transport: 60, location: '桃園機場', group: 'all', lat: 25.07, lon: 121.23, note: '起點' }
+                    { id: 101, date: '2026-03-19', time: '09:00', stay: 60, transport: 60, location: '荷蘭機場', group: 'holland', lat: 52.3, lon: 4.7, note: 'T1集合' },
+                    { id: 102, date: '2026-03-19', time: '09:30', stay: 60, transport: 30, location: '愛沙尼亞機場', group: 'baltic', lat: 59.4, lon: 24.7, note: '租車' }
                 ]);
                 const expenses = ref([
                     { id: 201, date: '2026-03-19', desc: '機場咖啡', amount: 500, currency: 'TWD', rate: 37, payer: '佩琪', splitWith: ['媽媽', '佩琪'] }
@@ -345,27 +340,56 @@
                         onEnd: (evt) => {
                             const { oldIndex, newIndex } = evt;
                             if (oldIndex === newIndex) return;
-                            const currentDayItems = [...filteredSchedule.value]; 
-                            const movedItem = currentDayItems.splice(oldIndex, 1)[0];
-                            currentDayItems.splice(newIndex, 0, movedItem);
-                            const otherItems = schedule.value.filter(i => i.date !== selectedDate.value);
-                            schedule.value = [...otherItems, ...currentDayItems];
+                            
+                            // 關鍵修復：只對「可見行程」進行重新排序
+                            // 1. 取得當前可見的行程副本 (這些是 DOM 顯示的順序)
+                            const visibleItems = [...filteredSchedule.value];
+                            
+                            // 2. 移動元素
+                            const movedItem = visibleItems.splice(oldIndex, 1)[0];
+                            visibleItems.splice(newIndex, 0, movedItem);
+                            
+                            // 3. 取得「當日」但「非可見」的行程 (例如在荷蘭視圖時的三小國行程)
+                            // 這些行程要保留不動
+                            const dayHiddenItems = schedule.value.filter(i => 
+                                i.date === selectedDate.value && 
+                                !(currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all')
+                            );
+                            
+                            // 4. 取得「非當日」的行程
+                            const otherDayItems = schedule.value.filter(i => i.date !== selectedDate.value);
+                            
+                            // 5. 合併所有資料：非當日 + 當日隱藏 + 當日可見(已排序)
+                            schedule.value = [...otherDayItems, ...dayHiddenItems, ...visibleItems];
+                            
+                            // 6. 觸發時間重算
                             nextTick(() => autoCalculateTime());
                         }
                     });
                 };
 
+                // 時間計算：以各自組別為主
                 const autoCalculateTime = () => {
-                    const dayItems = schedule.value.filter(i => i.date === selectedDate.value);
-                    if (dayItems.length === 0) return;
-                    let currentTime = new Date(`2000-01-01T${dayItems[0].time}`);
-                    for (let i = 0; i < dayItems.length - 1; i++) {
-                        const currentItem = dayItems[i];
-                        const nextItem = dayItems[i+1];
+                    // 只針對「目前過濾出來的列表」進行計算
+                    // 這意味著如果你在「荷蘭組」視圖，你只會重算荷蘭組的時間，三小國的不會動
+                    const visibleItems = filteredSchedule.value;
+                    
+                    if (visibleItems.length === 0) return;
+                    
+                    // 以該視圖的第一個行程時間為基準
+                    let currentTime = new Date(`2000-01-01T${visibleItems[0].time}`);
+                    
+                    for (let i = 0; i < visibleItems.length - 1; i++) {
+                        const currentItem = visibleItems[i];
+                        const nextItem = visibleItems[i+1];
+                        
                         const addMin = (currentItem.stay || 0) + (currentItem.transport || 0);
                         currentTime.setMinutes(currentTime.getMinutes() + addMin);
+                        
                         const h = String(currentTime.getHours()).padStart(2, '0');
                         const m = String(currentTime.getMinutes()).padStart(2, '0');
+                        
+                        // 直接修改物件參考，會反應到 schedule.value
                         nextItem.time = `${h}:${m}`;
                     }
                 };
@@ -374,9 +398,34 @@
                 watch(selectedDate, () => { if (activeTab.value === 'schedule') nextTick(initSortable); });
                 onMounted(() => { if (activeTab.value === 'schedule') initSortable(); });
 
-                const filteredSchedule = computed(() => schedule.value.filter(i => i.date === selectedDate.value && (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all')));
+                // Computed
+                const filteredSchedule = computed(() => {
+                    // 不做 sort，順序由 user 拖曳決定 (schedule.value 的物理順序)
+                    return schedule.value.filter(i => 
+                        i.date === selectedDate.value && 
+                        (currentGroup.value === 'all' || i.group === currentGroup.value || i.group === 'all')
+                    );
+                });
+                
                 const filteredExpenses = computed(() => expenses.value.filter(e => e.date === selectedDate.value));
+                const calendarDays = computed(() => {
+                    const curr = new Date(selectedDate.value);
+                    const y = curr.getFullYear(), m = curr.getMonth();
+                    const firstDay = new Date(y, m, 1);
+                    const startDay = firstDay.getDay();
+                    const days = [];
+                    for(let i=0; i<startDay; i++) days.push({ date: '', isCurrentMonth: false, fullDate: '' });
+                    const lastDate = new Date(y, m+1, 0).getDate();
+                    for(let i=1; i<=lastDate; i++) {
+                        const mm = String(m+1).padStart(2,'0');
+                        const dd = String(i).padStart(2,'0');
+                        days.push({ date: i, isCurrentMonth: true, fullDate: `${y}-${mm}-${dd}` });
+                    }
+                    return days;
+                });
+                const hasExpense = (d) => expenses.value.some(e => e.date === d);
 
+                // Map & Others
                 let map = null; let markers = [];
                 const initMap = () => { if (map) return; map = L.map('map-container').setView([52.3, 4.7], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); };
                 const updateMap = () => {
@@ -394,30 +443,7 @@
                 };
                 watch(activeTab, (val) => { if (val === 'map') nextTick(() => { initMap(); updateMap(); }); });
 
-                // Calendar Logic
-                const calendarDays = computed(() => {
-                    // 為了方便，我們顯示 2026 3月~4月的簡單整合，或者針對 selectedDate 的月份
-                    // 這裡做一個簡單的 3/15 - 4/15 範圍顯示，或者顯示 selectedDate 所在月份的 35 天
-                    // 採用後者：顯示 selectedDate 所在月份
-                    const curr = new Date(selectedDate.value);
-                    const y = curr.getFullYear(), m = curr.getMonth();
-                    const firstDay = new Date(y, m, 1);
-                    const startDay = firstDay.getDay(); // 星期幾
-                    const days = [];
-                    // 補前面的空白
-                    for(let i=0; i<startDay; i++) days.push({ date: '', isCurrentMonth: false, fullDate: '' });
-                    // 補當月日期
-                    const lastDate = new Date(y, m+1, 0).getDate();
-                    for(let i=1; i<=lastDate; i++) {
-                        const mm = String(m+1).padStart(2,'0');
-                        const dd = String(i).padStart(2,'0');
-                        days.push({ date: i, isCurrentMonth: true, fullDate: `${y}-${mm}-${dd}` });
-                    }
-                    return days;
-                });
-                const hasExpense = (d) => expenses.value.some(e => e.date === d);
-
-                // Modal & Search
+                // Modal
                 const showTripModal = ref(false); const showExpModal = ref(false); const isEditing = ref(false); const isEditingExp = ref(false);
                 const tempTrip = ref({}); const tempExp = ref({}); const showCopyMenu = ref(false); const copyTargetDate = ref('');
                 const osmResults = ref([]); const searchTimeout = ref(null);
@@ -439,6 +465,7 @@
                 const saveExpense = () => { tempExp.value.date = selectedDate.value; if (isEditingExp.value) { const idx = expenses.value.findIndex(e => e.id === tempExp.value.id); expenses.value[idx] = { ...tempExp.value }; } else { expenses.value.push({ ...tempExp.value, id: Date.now() }); } showExpModal.value = false; };
                 const deleteExpense = () => { expenses.value = expenses.value.filter(e => e.id !== tempExp.value.id); showExpModal.value = false; };
                 const toggleAllSplit = () => { tempExp.value.splitWith = tempExp.value.splitWith.length === members.length ? [] : [...members]; };
+                
                 const balances = computed(() => { let b = {}; members.forEach(m => b[m] = 0); expenses.value.forEach(e => { const val = e.currency === 'EUR' ? e.amount * (e.rate || 37) : e.amount; b[e.payer] += val; const share = val / e.splitWith.length; e.splitWith.forEach(m => b[m] -= share); }); return b; });
                 const settlements = computed(() => { const b = { ...balances.value }; const debtors = [], creditors = []; for (let m in b) { if (b[m] < -1) debtors.push({ name: m, amount: Math.abs(b[m]) }); else if (b[m] > 1) creditors.push({ name: m, amount: b[m] }); } const res = []; let i = 0, j = 0; while (i < debtors.length && j < creditors.length) { const amt = Math.min(debtors[i].amount, creditors[j].amount); res.push({ from: debtors[i].name, to: creditors[j].name, amount: amt }); debtors[i].amount -= amt; creditors[j].amount -= amt; if (debtors[i].amount < 1) i++; if (creditors[j].amount < 1) j++; } return res; });
 
